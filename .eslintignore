@@ -1,0 +1,9 @@
+node_modules
+dashboard-client
+data
+bots/instances
+bot discord/bots/instances
+bot discord
+bots
+coverage
+*.min.js

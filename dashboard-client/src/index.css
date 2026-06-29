@@ -1,0 +1,192 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm-grey dark surfaces */
+  --background: 240 6% 6%;
+  --foreground: 0 0% 98%;
+  --surface: 240 6% 9%;
+  --surface-elevated: 240 6% 11%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+  --border: 240 5% 18%;
+  --ring: 252 100% 68%;
+
+  /* Single saturated accent (indigo-violet) */
+  --accent: 252 100% 68%;
+  --accent-foreground: 0 0% 100%;
+  --accent-soft: 252 100% 68% / 0.12;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply font-sans antialiased text-neutral-100;
+    margin: 0;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% -20%,
+        hsl(var(--accent) / 0.1),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 100% 100%,
+        hsl(var(--accent) / 0.06),
+        transparent 70%
+      );
+    background-attachment: fixed;
+    overflow-x: hidden;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply tracking-tightish font-semibold;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    @apply font-mono;
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px hsl(var(--background)),
+      0 0 0 4px hsl(var(--ring) / 0.6);
+    border-radius: 8px;
+  }
+
+  ::selection {
+    background-color: hsl(var(--accent) / 0.35);
+    color: hsl(var(--accent-foreground));
+  }
+}
+
+@layer components {
+  /* Card primitives (legacy + upgraded) */
+  .card {
+    @apply rounded-2xl bg-neutral-900/60 ring-1 ring-white/5 shadow-soft p-6 backdrop-blur-sm;
+  }
+
+  .apex-card {
+    @apply rounded-2xl bg-neutral-900/40 ring-1 ring-white/5 backdrop-blur-sm transition-colors duration-150;
+  }
+
+  .bento-card {
+    @apply bg-neutral-900/40 ring-1 ring-white/5 rounded-[2rem] transition-all duration-300 relative overflow-hidden backdrop-blur-sm;
+  }
+
+  .bento-card:hover {
+    @apply ring-white/10 bg-neutral-900/60 -translate-y-0.5;
+    box-shadow: 0 20px 40px -16px rgba(0, 0, 0, 0.55);
+  }
+
+  .bento-card-active {
+    @apply bg-neutral-900 ring-accent/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.04)];
+  }
+
+  /* Badges & dots */
+  .accent-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_12px_rgba(124,92,255,0.7)];
+  }
+
+  .bento-badge {
+    @apply px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/10 text-accent-300 ring-1 ring-accent/20;
+  }
+
+  /* Inputs */
+  .apex-input {
+    @apply bg-neutral-900/40 ring-1 ring-white/5 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40 transition-all duration-150 font-medium text-sm text-neutral-200 placeholder:text-neutral-500;
+  }
+
+  /* Buttons — primary uses single accent fill */
+  .btn-primary,
+  .apex-button-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm
+           bg-accent text-white shadow-soft
+           hover:bg-accent-400 active:scale-[0.98]
+           focus-visible:ring-2 focus-visible:ring-accent/60
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary,
+  .apex-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm
+           bg-transparent text-neutral-100 ring-1 ring-white/10
+           hover:bg-white/5 hover:ring-white/20 active:scale-[0.98]
+           focus-visible:ring-2 focus-visible:ring-accent/60
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Sidebar */
+  .apex-sidebar-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium
+           text-neutral-400 transition-colors duration-150
+           hover:bg-white/5 hover:text-white;
+  }
+
+  .apex-sidebar-item-active {
+    @apply bg-white/[0.04] text-white ring-1 ring-white/5;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-neutral-700/70 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-neutral-600;
+}
+
+/* a11y: skip-to-content link — visible only when focused */
+.skip-to-content {
+  @apply sr-only;
+}
+.skip-to-content:focus {
+  @apply not-sr-only fixed top-2 left-2 z-[200]
+         px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold
+         shadow-soft ring-2 ring-white/40;
+}
+
+/* a11y: reduced-motion — cut non-essential motion and animation */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}

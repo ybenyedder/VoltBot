@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Secrets / variables d'environnement
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+
+# Bases de données & données d'instances
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+bots/instances/*/data/
+
+# Fichiers de lock runtime
+.bot.lock
+**/.bot.lock
+
+# Logs
+*.log
+log.txt
+logs/
+
+# Build
+dist/
+dist-ssr/
+
+# OS / éditeur
+.DS_Store
+.vscode/
+.idea/
+*.swp

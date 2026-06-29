@@ -1,0 +1,11 @@
+/*
+ * Shell-level overrides only.
+ * Global tokens, layers, and component primitives live in `index.css`.
+ * Keep this file lean — page-specific styles belong in their own modules.
+ */
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  isolation: isolate;
+}

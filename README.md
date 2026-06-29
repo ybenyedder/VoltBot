@@ -1,5 +1,10 @@
 # VoltBot
 
+[![CI](https://github.com/ybenyedder/VoltBot/actions/workflows/ci.yml/badge.svg)](https://github.com/ybenyedder/VoltBot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![discord.js](https://img.shields.io/badge/discord.js-v14-5865F2?logo=discord&logoColor=white)](https://discord.js.org)
+
 Plateforme **multi-bots Discord** centralisée avec un **dashboard web**. Un seul orchestrateur (`start.js`) fait tourner plusieurs instances de bot, chacune avec sa propre configuration, sa base de données et son interface d'administration.
 
 ## ✨ Fonctionnalités

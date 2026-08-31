@@ -42,13 +42,8 @@ module.exports = {
           try {
             const hpMsg = await message.channel.messages.fetch(updated.honeypotMessageId);
             if (hpMsg && hpMsg.author.id === client.user.id) {
-              const { EmbedBuilder } = require("discord.js");
-              const updatedEmbed = new EmbedBuilder()
-                .setColor("#2B2D31")
-                .setTitle("NE PAS ENVOYER DE MESSAGES DANS CE SALON")
-                .setDescription("Ce salon est utilisé pour détecter les bots de spam. Tout message envoyé ici entraînera la suppression de vos **5 derniers messages**.")
-                .setThumbnail("https://em-content.zobj.net/source/microsoft/319/honey-pot_1fad8.png")
-                .addFields({ name: "🍯 Détections", value: `${newCount}`, inline: true });
+              const { buildEmbed } = require("../commands/admin/honeypot");
+              const updatedEmbed = await buildEmbed(newCount);
               await hpMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
             }
           } catch (_) {}

@@ -5,14 +5,14 @@ const HONEY_IMG = "https://twemoji.maxcdn.com/v/latest/72x72/1fad8.png";
 async function buildEmbed(count) {
   return new EmbedBuilder()
     .setColor(0x000000)           // noir = pas de barre visible sur thème sombre
-    .setTitle("NE PAS ENVOYER DE MESSAGES DANS CE SALON")
+    .setTitle("DO NOT SEND MESSAGES IN THIS CHANNEL")
     .setDescription(
-      "Ce salon est utilisé pour détecter les bots de spam. Tout message envoyé ici entraînera la suppression de vos **5 derniers messages**."
+      "This channel is used to detect spam bots. Any message sent here will result in your **last 5 messages** being deleted."
     )
     .setThumbnail(HONEY_IMG)
     .addFields({
       name: "\u200b",
-      value: `🍯 Détections: **${count}**`,
+      value: `🍯 Detections: **${count}**`,
       inline: true
     });
 }

@@ -29,17 +29,40 @@ module.exports = {
       const prefix = guildSettings.prefix || client.config.prefix;
       // --- HONEYPOT ---
       if (guildSettings.honeypotChannel && message.channel.id === guildSettings.honeypotChannel) {
-        // Supprimer le message du piège immédiatement
         await message.delete().catch(() => {});
-        // Supprimer les 5 derniers messages du membre dans tous les salons textuels
+
+        // Incrémenter le compteur
+        client.db.db.prepare("UPDATE guilds SET honeypotCount = COALESCE(honeypotCount,0) + 1 WHERE guildId = ?").run(message.guild.id);
+        const updated = client.db.getGuild(message.guild.id);
+        client.guildSettingsCache.set(message.guild.id, updated);
+        const newCount = updated.honeypotCount || 1;
+
+        // Mettre à jour l embed dans le salon honeypot
+        if (updated.honeypotMessageId) {
+          try {
+            const hpMsg = await message.channel.messages.fetch(updated.honeypotMessageId);
+            if (hpMsg && hpMsg.author.id === client.user.id) {
+              const { EmbedBuilder } = require("discord.js");
+              const updatedEmbed = new EmbedBuilder()
+                .setColor("#2B2D31")
+                .setTitle("NE PAS ENVOYER DE MESSAGES DANS CE SALON")
+                .setDescription("Ce salon est utilisé pour détecter les bots de spam. Tout message envoyé ici entraînera la suppression de vos **5 derniers messages**.")
+                .setThumbnail("https://em-content.zobj.net/source/microsoft/319/honey-pot_1fad8.png")
+                .addFields({ name: "🍯 Détections", value: `${newCount}`, inline: true });
+              await hpMsg.edit({ embeds: [updatedEmbed] }).catch(() => {});
+            }
+          } catch (_) {}
+        }
+
+        // Supprimer les 5 derniers messages du membre dans tous les salons
         const textChannels = message.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased() && c.id !== message.channel.id);
         let deleted = 0;
         for (const [, ch] of textChannels) {
           if (deleted >= 5) break;
           try {
             const msgs = await ch.messages.fetch({ limit: 50 });
-            const userMsgs = msgs.filter(m => m.author.id === message.author.id).first(5 - deleted);
-            for (const m of userMsgs.values()) {
+            const userMsgs = [...msgs.filter(m => m.author.id === message.author.id).values()].slice(0, 5 - deleted);
+            for (const m of userMsgs) {
               await m.delete().catch(() => {});
               deleted++;
               if (deleted >= 5) break;

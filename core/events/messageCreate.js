@@ -27,6 +27,28 @@ module.exports = {
         client.guildSettingsCache.set(message.guild.id, guildSettings);
       }
       const prefix = guildSettings.prefix || client.config.prefix;
+      // --- HONEYPOT ---
+      if (guildSettings.honeypotChannel && message.channel.id === guildSettings.honeypotChannel) {
+        // Supprimer le message du piège immédiatement
+        await message.delete().catch(() => {});
+        // Supprimer les 5 derniers messages du membre dans tous les salons textuels
+        const textChannels = message.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased() && c.id !== message.channel.id);
+        let deleted = 0;
+        for (const [, ch] of textChannels) {
+          if (deleted >= 5) break;
+          try {
+            const msgs = await ch.messages.fetch({ limit: 50 });
+            const userMsgs = msgs.filter(m => m.author.id === message.author.id).first(5 - deleted);
+            for (const m of userMsgs.values()) {
+              await m.delete().catch(() => {});
+              deleted++;
+              if (deleted >= 5) break;
+            }
+          } catch (_) {}
+        }
+        return;
+      }
+
 
       // Langue du serveur — bind un traducteur sur le message pour que toutes
       // les commandes (execute(client, message, args)) puissent faire message.t(key).

@@ -31,7 +31,7 @@ module.exports = {
     ctx.fillStyle = formattedHex;
     ctx.fillRect(0, 0, 200, 200);
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), {
+    const attachment = new AttachmentBuilder(canvas.toBuffer('image/png'), {
       name: "color.png",
     });
 

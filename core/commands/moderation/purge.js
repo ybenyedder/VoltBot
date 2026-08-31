@@ -11,9 +11,10 @@ module.exports = {
   userPerms: [PermissionsBitField.Flags.ManageMessages],
   botPerms: [PermissionsBitField.Flags.ManageMessages],
   async execute(client, message, args) {
-    const amount = parseInt(args[0]);
+    // Sans argument → 100 par défaut
+    const amount = args[0] ? parseInt(args[0]) : 100;
 
-    if (isNaN(amount) || amount < 1 || amount > 99) {
+    if (isNaN(amount) || amount < 1 || amount > 1000) {
       return message
         .reply({
           embeds: [
@@ -28,36 +29,36 @@ module.exports = {
 
     try {
       await message.delete().catch(() => {});
-      const messages = await message.channel.messages.fetch({ limit: amount });
 
-      if (messages.size === 0) {
-        const empty = await message.channel
-          .send({
-            embeds: [
-              client.embedBuilder.error(
-                client,
-                message.t("commands.purge.no_messages"),
-              ),
-            ],
-          })
-          .catch(() => null);
-        if (empty) setTimeout(() => empty.delete().catch(() => {}), 5000);
-        return;
+      // bulkDelete max 100 par batch, on boucle si besoin
+      let totalDeleted = 0;
+      let remaining = amount;
+
+      while (remaining > 0) {
+        const batchSize = Math.min(remaining, 100);
+        const messages = await message.channel.messages.fetch({ limit: batchSize });
+        if (messages.size === 0) break;
+
+        const deleted = await message.channel.bulkDelete(messages, true);
+        totalDeleted += deleted.size;
+        remaining -= batchSize;
+
+        // Si Discord a rien supprimé (messages >14j), on arrête
+        if (deleted.size === 0) break;
+        if (remaining > 0) await new Promise(r => setTimeout(r, 1000));
       }
-
-      const deletedMessages = await message.channel.bulkDelete(messages, true);
 
       const reply = await message.channel
         .send({
           embeds: [
             client.embedBuilder
-              .success(client, "​")
+              .success(client, "\u200b")
               .setDescription(null)
               .setAuthor({ name: message.t("commands.purge.title") })
               .addFields(
                 {
                   name: message.t("commands.purge.field_deleted"),
-                  value: `${fmtNum(deletedMessages.size)}/${fmtNum(amount)}`,
+                  value: `${fmtNum(totalDeleted)}/${fmtNum(amount)}`,
                   inline: true,
                 },
                 {

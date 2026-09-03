@@ -45,6 +45,7 @@ module.exports = {
               `• \`${prefix}snipeurl stop\` : Arrête le sniper actif`,
               `• \`${prefix}snipeurl status\` : Affiche les détails du sniper`,
               `• \`${prefix}snipeurl check <code/url>\` : Vérifie si une URL est libre`,
+              `• \`${prefix}snipeurl token <user_token>\` : Configure un user token pour l'auto-claim`,
             ].join("\n"),
             inline: false,
           },
@@ -54,6 +55,38 @@ module.exports = {
     }
 
     const sub = args[0].toLowerCase();
+
+    // Commande TOKEN (configuration d'un compte utilisateur pour bypass la restriction bot de Discord)
+    if (sub === "token") {
+      if (!args[1] || args[1] === "remove" || args[1] === "delete") {
+        client.db.updateVanitySniper(message.guild.id, { userToken: null });
+        return message
+          .reply({
+            embeds: [
+              client.embedBuilder.success(
+                client,
+                "Le token utilisateur pour le sniper a été supprimé.",
+              ),
+            ],
+          })
+          .catch(() => {});
+      }
+
+      const inputToken = args[1].trim().replace(/^Bot\s+/i, "");
+      client.db.updateVanitySniper(message.guild.id, { userToken: inputToken });
+      await message.delete().catch(() => {}); // Supprime le message contenant le token pour sécurité
+
+      return message.channel
+        .send({
+          embeds: [
+            client.embedBuilder.success(
+              client,
+              "🔒 **Token utilisateur configuré !** Votre message a été supprimé par sécurité.\nLe bot pourra désormais réclamer automatiquement l'URL dès qu'elle devient disponible.",
+            ),
+          ],
+        })
+        .catch(() => {});
+    }
 
     // 1. Commande STOP
     if (sub === "stop" || sub === "off") {

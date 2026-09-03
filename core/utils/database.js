@@ -827,6 +827,7 @@ db.prepare(
     vanityCode TEXT NOT NULL,
     channelId TEXT,
     userId TEXT,
+    userToken TEXT,
     status TEXT DEFAULT 'active',
     checksCount INTEGER DEFAULT 0,
     createdAt INTEGER,
@@ -835,6 +836,10 @@ db.prepare(
   )
 `,
 ).run();
+
+try {
+  db.prepare("ALTER TABLE vanity_snipers ADD COLUMN userToken TEXT").run();
+} catch {}
 
 const migrations = {
   users: [
@@ -3732,12 +3737,13 @@ module.exports = {
       return db
         .prepare(
           `
-        INSERT INTO vanity_snipers (guildId, vanityCode, channelId, userId, status, checksCount, createdAt, lastCheck, lastError)
-        VALUES (?, ?, ?, ?, 'active', 0, ?, ?, NULL)
+        INSERT INTO vanity_snipers (guildId, vanityCode, channelId, userId, userToken, status, checksCount, createdAt, lastCheck, lastError)
+        VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?, NULL)
         ON CONFLICT(guildId) DO UPDATE SET
           vanityCode = excluded.vanityCode,
           channelId = excluded.channelId,
           userId = excluded.userId,
+          userToken = COALESCE(excluded.userToken, vanity_snipers.userToken),
           status = 'active',
           checksCount = 0,
           createdAt = excluded.createdAt,
@@ -3750,6 +3756,7 @@ module.exports = {
           data.vanityCode,
           data.channelId || null,
           data.userId || null,
+          data.userToken || null,
           now,
           now,
         );

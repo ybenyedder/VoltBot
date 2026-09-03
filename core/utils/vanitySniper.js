@@ -5,6 +5,9 @@ const Logger = require("./logger");
 // Map en mémoire des snipers actifs : guildId -> { interval, data }
 const activeSnipers = new Map();
 
+// Map pour éviter de spammer les alertes urgentes si non réclamé : guildId -> timestamp
+const lastAlertTimestamps = new Map();
+
 /**
  * Nettoie une chaîne pour en extraire le code vanity pur
  * @param {string} input
@@ -55,23 +58,61 @@ async function checkAvailability(code) {
 
 /**
  * Tente de revendiquer le code vanity pour la guilde via l'API Discord
+ * Supporte le token utilisateur (requis par Discord pour modifier les vanity URLs)
+ * ou le bot token en fallback.
  * @param {import("discord.js").Client} client
  * @param {string} guildId
  * @param {string} code
- * @returns {Promise<{ success: boolean, error?: string, raw?: any }>}
+ * @param {string|null} [userToken]
+ * @returns {Promise<{ success: boolean, error?: string, raw?: any, needUserToken?: boolean }>}
  */
-async function claimVanity(client, guildId, code) {
+async function claimVanity(client, guildId, code, userToken = null) {
+  const token = userToken || process.env.DISCORD_USER_TOKEN;
+
+  if (token) {
+    try {
+      const cleanToken = token.trim().replace(/^Bot\s+/i, "");
+      const res = await axios.patch(
+        `https://discord.com/api/v10/guilds/${guildId}/vanity-url`,
+        { code },
+        {
+          headers: {
+            Authorization: cleanToken,
+            "Content-Type": "application/json",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+          },
+          timeout: 4000,
+        },
+      );
+      return { success: true, raw: res.data };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
+      return {
+        success: false,
+        error: errMsg,
+        status: err.response?.status,
+        needUserToken: false,
+      };
+    }
+  }
+
+  // Fallback bot token
   try {
     const res = await client.rest.patch(Routes.guildVanityUrl(guildId), {
       body: { code },
     });
     return { success: true, raw: res };
   } catch (err) {
+    const isBotRestricted =
+      err.message?.includes("Bots cannot use this endpoint") ||
+      err.status === 403;
     return {
       success: false,
       error: err.message,
       code: err.code,
       status: err.status,
+      needUserToken: isBotRestricted,
     };
   }
 }
@@ -80,7 +121,7 @@ async function claimVanity(client, guildId, code) {
  * Démarre ou reprogramme la boucle de vérification pour une guilde
  * @param {import("discord.js").Client} client
  * @param {string} guildId
- * @param {{ vanityCode: string, channelId?: string, userId?: string }} options
+ * @param {{ vanityCode: string, channelId?: string, userId?: string, userToken?: string }} options
  */
 function startSniper(client, guildId, options) {
   stopSniper(client, guildId, false);
@@ -90,10 +131,15 @@ function startSniper(client, guildId, options) {
     throw new Error("Invalid vanity code format");
   }
 
+  // Récupérer les données existantes si userToken déjà présent
+  const existing = client.db.getVanitySniper(guildId);
+  const tokenToUse = options.userToken !== undefined ? options.userToken : existing?.userToken;
+
   client.db.setVanitySniper(guildId, {
     vanityCode,
     channelId: options.channelId,
     userId: options.userId,
+    userToken: tokenToUse || null,
   });
 
   let checkCount = 0;
@@ -125,7 +171,7 @@ function startSniper(client, guildId, options) {
 
       if (result.available) {
         Logger.info(`[SNIPER_URL] Vanity ${vanityCode} détectée libre ! Tentative de claim pour ${guild.name} (${guildId})...`);
-        const claimRes = await claimVanity(client, guildId, vanityCode);
+        const claimRes = await claimVanity(client, guildId, vanityCode, tokenToUse);
 
         if (claimRes.success) {
           Logger.info(`[SNIPER_URL] 🎯 SUCCÈS : Vanity ${vanityCode} attribuée à ${guild.name} !`);
@@ -144,6 +190,16 @@ function startSniper(client, guildId, options) {
             lastCheck: Date.now(),
             checksCount: checkCount,
           });
+
+          // Si Discord bloque les bots sur cet endpoint et aucun token utilisateur n'est configuré
+          if (claimRes.needUserToken) {
+            const now = Date.now();
+            const lastAlert = lastAlertTimestamps.get(guildId) || 0;
+            if (now - lastAlert > 300000) { // Alerte toutes les 5 minutes maximum
+              lastAlertTimestamps.set(guildId, now);
+              notifyUrgentAvailable(client, guild, vanityCode, options.channelId, options.userId);
+            }
+          }
         }
       } else {
         // Sauvegarde périodique du compteur toutes les 10 vérifications
@@ -170,6 +226,7 @@ function startSniper(client, guildId, options) {
     vanityCode,
     channelId: options.channelId,
     userId: options.userId,
+    userToken: tokenToUse || null,
     startedAt: Date.now(),
     getChecks: () => checkCount,
   });
@@ -192,10 +249,34 @@ function notifySuccess(client, guild, code, channelId, userId, alreadyOwned = fa
         ? `L'URL personnalisée **discord.gg/${code}** est déjà attribuée à ce serveur !`
         : `🎯 **SNIPE RÉUSSI !**\nL'URL personnalisée **discord.gg/${code}** a été snipée et attribuée avec succès à ce serveur !`,
     )
-    .setTitle("🎯 Sniper d'URL — Succès !")
     .setTimestamp();
 
   const content = userId ? `<@${userId}>` : undefined;
+  channel.send({ content, embeds: [embed] }).catch(() => {});
+}
+
+/**
+ * Alerte d'urgence quand l'URL est libre mais que Discord bloque les tokens bot
+ */
+function notifyUrgentAvailable(client, guild, code, channelId, userId) {
+  if (!channelId) return;
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  const prefix = client.config.prefix || "+";
+  const embed = client.embedBuilder
+    .warning(
+      client,
+      `🚨 **L'URL discord.gg/${code} EST LIBRE ACTUELLEMENT !**\n\n` +
+      `Discord bloque la modification automatique des Vanity URLs aux applications bots (*"Bots cannot use this endpoint"*).\n\n` +
+      `👉 **2 solutions :**\n` +
+      `1. Réclamez-la manuellement tout de suite dans **Paramètres du serveur > URL personnalisée**.\n` +
+      `2. Pour que le bot la réclame automatiquement et instantanément en 0ms, configurez un user token avec :\n` +
+      `\`${prefix}snipeurl token <votre_token_utilisateur>\``,
+    )
+    .setTimestamp();
+
+  const content = userId ? `<@${userId}>` : "@everyone";
   channel.send({ content, embeds: [embed] }).catch(() => {});
 }
 
@@ -231,6 +312,7 @@ function init(client) {
           vanityCode: record.vanityCode,
           channelId: record.channelId,
           userId: record.userId,
+          userToken: record.userToken,
         });
         resumed++;
       } catch (e) {

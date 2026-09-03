@@ -278,5 +278,13 @@ module.exports = {
     logger.info(
       "Garbage collection des Maps mémoire initialisé (toutes les 5 min).",
     );
+
+    // Initialisation des snipers d'URL personnalisée (Vanity)
+    try {
+      const vanitySniper = require("../utils/vanitySniper");
+      vanitySniper.init(client);
+    } catch (e) {
+      logger.error("[READY] Erreur lors de l'initialisation du vanity sniper :", e);
+    }
   },
 };

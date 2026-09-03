@@ -820,6 +820,22 @@ db.prepare(
 `,
 ).run();
 
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS vanity_snipers (
+    guildId TEXT PRIMARY KEY,
+    vanityCode TEXT NOT NULL,
+    channelId TEXT,
+    userId TEXT,
+    status TEXT DEFAULT 'active',
+    checksCount INTEGER DEFAULT 0,
+    createdAt INTEGER,
+    lastCheck INTEGER,
+    lastError TEXT
+  )
+`,
+).run();
+
 const migrations = {
   users: [
     { name: "invites", type: "TEXT" },
@@ -3684,5 +3700,92 @@ module.exports = {
       return (guild && guild[legacyCol]) || null;
     }
     return null;
+  },
+
+  getVanitySniper: (guildId) => {
+    try {
+      return (
+        db.prepare("SELECT * FROM vanity_snipers WHERE guildId = ?").get(guildId) || null
+      );
+    } catch (e) {
+      Logger.error("[DB] Error getVanitySniper:", e);
+      return null;
+    }
+  },
+
+  getAllActiveVanitySnipers: () => {
+    try {
+      return (
+        db
+          .prepare("SELECT * FROM vanity_snipers WHERE status = 'active'")
+          .all() || []
+      );
+    } catch (e) {
+      Logger.error("[DB] Error getAllActiveVanitySnipers:", e);
+      return [];
+    }
+  },
+
+  setVanitySniper: (guildId, data) => {
+    try {
+      const now = Date.now();
+      return db
+        .prepare(
+          `
+        INSERT INTO vanity_snipers (guildId, vanityCode, channelId, userId, status, checksCount, createdAt, lastCheck, lastError)
+        VALUES (?, ?, ?, ?, 'active', 0, ?, ?, NULL)
+        ON CONFLICT(guildId) DO UPDATE SET
+          vanityCode = excluded.vanityCode,
+          channelId = excluded.channelId,
+          userId = excluded.userId,
+          status = 'active',
+          checksCount = 0,
+          createdAt = excluded.createdAt,
+          lastCheck = excluded.lastCheck,
+          lastError = NULL
+      `,
+        )
+        .run(
+          guildId,
+          data.vanityCode,
+          data.channelId || null,
+          data.userId || null,
+          now,
+          now,
+        );
+    } catch (e) {
+      Logger.error("[DB] Error setVanitySniper:", e);
+      return null;
+    }
+  },
+
+  updateVanitySniper: (guildId, updates = {}) => {
+    try {
+      const fields = [];
+      const values = [];
+      for (const [key, val] of Object.entries(updates)) {
+        fields.push(`${key} = ?`);
+        values.push(val);
+      }
+      if (fields.length === 0) return null;
+      values.push(guildId);
+      return db
+        .prepare(`UPDATE vanity_snipers SET ${fields.join(", ")} WHERE guildId = ?`)
+        .run(...values);
+    } catch (e) {
+      Logger.error("[DB] Error updateVanitySniper:", e);
+      return null;
+    }
+  },
+
+  deleteVanitySniper: (guildId) => {
+    try {
+      return db
+        .prepare("DELETE FROM vanity_snipers WHERE guildId = ?")
+        .run(guildId);
+    } catch (e) {
+      Logger.error("[DB] Error deleteVanitySniper:", e);
+      return null;
+    }
   },
 };

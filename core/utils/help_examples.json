@@ -264,6 +264,7 @@
   "serverinfo": "• `${prefix}serverinfo` - Affiche des informations sur le serveur.",
   "snipe": "• `${prefix}snipe` - Affiche le dernier message supprimé dans ce salon.",
   "snipeedit": "• `${prefix}snipeedit` - Affiche le dernier message édité",
+  "snipeurl": "• `${prefix}snipeurl <code/url>` - Surveille et réclame automatiquement une URL personnalisée (vanity).",
   "snowaybots": "• `${prefix}snowaybots` - Affiche les bots qui ne sont pas sur d'autres serveurs",
   "sondage": "• `${prefix}sondage [question]` - Crée un sondage OUI/NON.",
   "steal": "• `${prefix}steal <emoji> [nom]` - Vole un emoji et l'ajoute au serveur.",

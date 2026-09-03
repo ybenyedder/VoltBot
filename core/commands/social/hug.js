@@ -1,4 +1,5 @@
-const axios = require("axios");
+const { getAnimeGif } = require("../../utils/animeGif");
+const Logger = require("../../utils/logger");
 
 module.exports = {
   name: "hug",
@@ -25,19 +26,20 @@ module.exports = {
     }
 
     try {
-      const res = await axios.get("https://some-random-api.com/animu/hug");
+      const gifUrl = await getAnimeGif("hug");
 
       const embed = client.embedBuilder
-        .premium(client, message.t("commands.hug.title"), "")
+        .premium(client, message.t("commands.hug.title"), null)
         .setAuthor({
           name: message.t("commands.hug.author", { author: message.author.username, target: target.username }),
           iconURL: message.author.displayAvatarURL({ size: 256 }),
         })
         .setDescription(null)
-        .setImage(res.data.link);
+        .setImage(gifUrl);
 
       await message.reply({ embeds: [embed] }).catch(() => {});
     } catch (e) {
+      Logger.error("[HUG] Failed to execute hug command:", e);
       await message
         .reply({
           embeds: [

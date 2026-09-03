@@ -40,9 +40,25 @@ describe("embedBuilder — premium / base", () => {
     expect(embed.toJSON().description).toBe("Body");
   });
 
+  it("premium() does not throw on empty or null description", () => {
+    const embedEmpty = eb.premium(client, "Title", "");
+    assertEmbed(embedEmpty);
+    expect(embedEmpty.toJSON().description).toBeUndefined();
+
+    const embedNull = eb.premium(client, "Title", null);
+    assertEmbed(embedNull);
+    expect(embedNull.toJSON().description).toBeUndefined();
+  });
+
   it("base() works with no title/description", () => {
     const embed = eb.base(client);
     assertEmbed(embed);
+  });
+
+  it("base() does not throw on empty or null description", () => {
+    const embedEmpty = eb.base(client, "Title", "");
+    assertEmbed(embedEmpty);
+    expect(embedEmpty.toJSON().description).toBeUndefined();
   });
 });
 

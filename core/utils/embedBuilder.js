@@ -40,33 +40,46 @@ const userAvatarOrBot = (client, user, size) => {
 module.exports = {
   getTheme,
 
-  premium: (client, title, description, thumbnail = null) => {
+  premium: (client, title, description = null, thumbnail = null) => {
     const embed = new EmbedBuilder()
       .setColor(getTheme(client))
-      .setAuthor({
-        name: `${title}`,
-        iconURL: botAvatar(client, 64),
-      })
-      .setDescription(`${description}`)
-      .setThumbnail(thumbnail || botAvatar(client, 256))
       .setTimestamp()
       .setFooter({ text: footerText(client), iconURL: footerIcon(client) });
+
+    if (title != null && String(title).trim().length > 0) {
+      embed.setAuthor({
+        name: `${title}`,
+        iconURL: botAvatar(client, 64),
+      });
+    }
+
+    if (description != null && String(description).length > 0) {
+      embed.setDescription(String(description));
+    }
+
+    const thumb = thumbnail || botAvatar(client, 256);
+    if (thumb) {
+      embed.setThumbnail(thumb);
+    }
 
     return embed;
   },
 
-  base: (client, title, description) => {
+  base: (client, title = null, description = null) => {
     const embed = new EmbedBuilder()
       .setColor(getTheme(client))
       .setTimestamp()
       .setFooter({ text: footerText(client), iconURL: footerIcon(client) });
 
-    if (title)
+    if (title != null && String(title).trim().length > 0) {
       embed.setAuthor({
-        name: title,
+        name: `${title}`,
         iconURL: botAvatar(client, 64),
       });
-    if (description) embed.setDescription(description);
+    }
+    if (description != null && String(description).length > 0) {
+      embed.setDescription(String(description));
+    }
 
     return embed;
   },

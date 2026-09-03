@@ -1,4 +1,5 @@
-const axios = require("axios");
+const { getAnimeGif } = require("../../utils/animeGif");
+const Logger = require("../../utils/logger");
 
 module.exports = {
   name: "pat",
@@ -25,19 +26,20 @@ module.exports = {
     }
 
     try {
-      const res = await axios.get("https://some-random-api.com/animu/pat");
+      const gifUrl = await getAnimeGif("pat");
 
       const embed = client.embedBuilder
-        .premium(client, message.t("commands.pat.title"), "")
+        .premium(client, message.t("commands.pat.title"), null)
         .setAuthor({
           name: message.t("commands.pat.author", { author: message.author.username, target: target.username }),
           iconURL: message.author.displayAvatarURL({ size: 256 }),
         })
         .setDescription(null)
-        .setImage(res.data.link);
+        .setImage(gifUrl);
 
       await message.reply({ embeds: [embed] }).catch(() => {});
     } catch (e) {
+      Logger.error("[PAT] Failed to execute pat command:", e);
       await message
         .reply({
           embeds: [

@@ -14,7 +14,7 @@ module.exports = {
   userPerms: [PermissionsBitField.Flags.Administrator],
   async execute(client, message, args) {
     const embed = client.embedBuilder
-      .premium(client, message.t("commands.lettres.title"), "")
+      .premium(client, message.t("commands.lettres.title"), null)
       .setAuthor({
         name: message.t("commands.lettres.title"),
         iconURL: client?.user?.displayAvatarURL?.({ size: 256 }),

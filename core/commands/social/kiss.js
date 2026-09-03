@@ -1,4 +1,5 @@
-const axios = require("axios");
+const { getAnimeGif } = require("../../utils/animeGif");
+const Logger = require("../../utils/logger");
 
 module.exports = {
   name: "kiss",
@@ -25,19 +26,20 @@ module.exports = {
     }
 
     try {
-      const res = await axios.get("https://nekos.life/api/v2/img/kiss");
+      const gifUrl = await getAnimeGif("kiss");
 
       const embed = client.embedBuilder
-        .premium(client, message.t("commands.kiss.title"), "")
+        .premium(client, message.t("commands.kiss.title"), null)
         .setAuthor({
           name: message.t("commands.kiss.author", { author: message.author.username, target: target.username }),
           iconURL: message.author.displayAvatarURL({ size: 256 }),
         })
         .setDescription(null)
-        .setImage(res.data.url);
+        .setImage(gifUrl);
 
       await message.reply({ embeds: [embed] }).catch(() => {});
     } catch (e) {
+      Logger.error("[KISS] Failed to execute kiss command:", e);
       await message
         .reply({
           embeds: [

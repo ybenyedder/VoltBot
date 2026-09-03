@@ -87,11 +87,19 @@ async function claimVanity(client, guildId, code, userToken = null) {
       );
       return { success: true, raw: res.data };
     } catch (err) {
-      const errMsg = err.response?.data?.message || err.message;
+      const errMsg = err.response?.data?.message || err.response?.data?.title || err.message;
+      let retryAfter = 60;
+      if (err.response?.headers?.["retry-after"]) {
+        const headerVal = parseInt(err.response.headers["retry-after"], 10);
+        if (!isNaN(headerVal)) retryAfter = headerVal;
+      } else if (err.response?.data?.retry_after) {
+        retryAfter = Math.ceil(err.response.data.retry_after);
+      }
       return {
         success: false,
         error: errMsg,
         status: err.response?.status,
+        retryAfter: err.response?.status === 429 ? retryAfter : null,
         needUserToken: false,
       };
     }
@@ -144,6 +152,7 @@ function startSniper(client, guildId, options) {
 
   let checkCount = 0;
   let isChecking = false;
+  let claimCooldownUntil = 0;
 
   const performCheck = async () => {
     if (isChecking) return;
@@ -170,6 +179,29 @@ function startSniper(client, guildId, options) {
       const result = await checkAvailability(vanityCode);
 
       if (result.available) {
+        // 1. Si aucun token utilisateur n'est configuré :
+        // Discord interdit formellement les bots sur cet endpoint ("Bots cannot use this endpoint").
+        // On évite d'envoyer des requêtes en boucle pour ne pas déclencher Cloudflare Error 1015.
+        if (!tokenToUse) {
+          const now = Date.now();
+          const lastAlert = lastAlertTimestamps.get(guildId) || 0;
+          if (now - lastAlert > 180000) { // Alerte toutes les 3 minutes maximum
+            lastAlertTimestamps.set(guildId, now);
+            notifyUrgentAvailable(client, guild, vanityCode, options.channelId, options.userId);
+          }
+          return;
+        }
+
+        // 2. Si on est sous un cooldown de rate limit Discord / Cloudflare (429)
+        const now = Date.now();
+        if (now < claimCooldownUntil) {
+          const remainingSec = Math.ceil((claimCooldownUntil - now) / 1000);
+          if (checkCount % 12 === 0) {
+            Logger.warn(`[SNIPER_URL] Rate-limit actif pour ${vanityCode}, attente de fin de cooldown (${remainingSec}s restantes).`);
+          }
+          return;
+        }
+
         Logger.info(`[SNIPER_URL] Vanity ${vanityCode} détectée libre ! Tentative de claim pour ${guild.name} (${guildId})...`);
         const claimRes = await claimVanity(client, guildId, vanityCode, tokenToUse);
 
@@ -184,7 +216,21 @@ function startSniper(client, guildId, options) {
           notifySuccess(client, guild, vanityCode, options.channelId, options.userId, false);
           return;
         } else {
-          Logger.error(`[SNIPER_URL] Échec lors du claim de ${vanityCode} : ${claimRes.error}`);
+          Logger.error(`[SNIPER_URL] Échec lors du claim de ${vanityCode} : ${claimRes.error} (Status: ${claimRes.status})`);
+
+          // Gestion du rate-limit (429)
+          if (claimRes.status === 429) {
+            const retrySec = claimRes.retryAfter || 60;
+            claimCooldownUntil = Date.now() + (retrySec * 1000);
+            Logger.warn(`[SNIPER_URL] ⏳ Rate limit Cloudflare/Discord (429). Cooldown de ${retrySec}s appliqué.`);
+
+            const lastAlert = lastAlertTimestamps.get(guildId) || 0;
+            if (Date.now() - lastAlert > 300000) { // Alerte toutes les 5 minutes maximum
+              lastAlertTimestamps.set(guildId, Date.now());
+              notifyRateLimitWarning(client, guild, vanityCode, options.channelId, options.userId, retrySec);
+            }
+          }
+
           client.db.updateVanitySniper(guildId, {
             lastError: claimRes.error,
             lastCheck: Date.now(),
@@ -193,10 +239,9 @@ function startSniper(client, guildId, options) {
 
           // Si Discord bloque les bots sur cet endpoint et aucun token utilisateur n'est configuré
           if (claimRes.needUserToken) {
-            const now = Date.now();
             const lastAlert = lastAlertTimestamps.get(guildId) || 0;
-            if (now - lastAlert > 300000) { // Alerte toutes les 5 minutes maximum
-              lastAlertTimestamps.set(guildId, now);
+            if (Date.now() - lastAlert > 300000) {
+              lastAlertTimestamps.set(guildId, Date.now());
               notifyUrgentAvailable(client, guild, vanityCode, options.channelId, options.userId);
             }
           }
@@ -277,6 +322,29 @@ function notifyUrgentAvailable(client, guild, code, channelId, userId) {
     .setTimestamp();
 
   const content = userId ? `<@${userId}>` : "@everyone";
+  channel.send({ content, embeds: [embed] }).catch(() => {});
+}
+
+/**
+ * Alerte quand Cloudflare/Discord applique un rate limit 429 sur la réclamation
+ */
+function notifyRateLimitWarning(client, guild, code, channelId, userId, retrySec) {
+  if (!channelId) return;
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  const minutes = Math.ceil(retrySec / 60);
+  const embed = client.embedBuilder
+    .warning(
+      client,
+      `⚠️ **L'URL discord.gg/${code} EST LIBRE, MAIS DISCORD APPLIQUE UN DÉLAI D'ATTENTE (RATE-LIMIT 429) !**\n\n` +
+      `L'URL est disponible, mais les serveurs Cloudflare de Discord limitent temporairement les requêtes automatiques sur ce serveur (~${minutes} min d'attente).\n\n` +
+      `👉 **CONSEIL IMMÉDIAT :**\n` +
+      `Pour ne pas risquer qu'un tiers la prenne pendant ce délai, **réclamez-la manuellement dès maintenant** dans vos **Paramètres du serveur > URL personnalisée** !`,
+    )
+    .setTimestamp();
+
+  const content = userId ? `<@${userId}>` : undefined;
   channel.send({ content, embeds: [embed] }).catch(() => {});
 }
 

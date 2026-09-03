@@ -139,6 +139,10 @@ module.exports = {
         ? activeSnipers.get(message.guild.id).getChecks()
         : sniperData.checksCount || 0;
 
+      const isClaimedByGuild =
+        message.guild.vanityURLCode &&
+        message.guild.vanityURLCode.toLowerCase() === sniperData.vanityCode.toLowerCase();
+
       const embed = client.embedBuilder
         .base(client, "🎯 Statut du Sniper d'URL")
         .setDescription(null)
@@ -151,11 +155,16 @@ module.exports = {
           {
             name: "État",
             value:
-              sniperData.status === "active" && isMemoryActive
-                ? "🟢 En cours de surveillance (~5s)"
-                : sniperData.status === "claimed"
-                  ? "🎯 Réclamé"
+              isClaimedByGuild || sniperData.status === "claimed"
+                ? "🎯 Réclamé (Actif sur ce serveur)"
+                : sniperData.status === "active" && isMemoryActive
+                  ? "🟢 En cours de surveillance (~5s)"
                   : "🔴 Arrêté",
+            inline: true,
+          },
+          {
+            name: "Token utilisateur",
+            value: sniperData.userToken ? "🔒 Configuré (Auto-claim actif)" : "⚠️ Non configuré",
             inline: true,
           },
           {

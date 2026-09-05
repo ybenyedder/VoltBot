@@ -25,8 +25,9 @@ module.exports = function (client, middlewares, helpers) {
   router.patch("/bot/settings", requireAuth, (req, res) => {
     const isPrimaryOwner =
       process.env.OWNER_ID &&
-      process.env.OWNER_ID.split(",")
+      process.env.OWNER_ID.split(/[\s,]+/)
         .map((id) => id.trim())
+        .filter(Boolean)
         .includes(req.user.id);
     if (!isPrimaryOwner)
       return res

@@ -241,7 +241,7 @@ function initDashboard(client) {
 
     // Bypass all checks for owners and speedphrase users
     const owners = process.env.OWNER_ID
-      ? process.env.OWNER_ID.split(",").map((id) => id.trim())
+      ? process.env.OWNER_ID.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean)
       : [];
     const isBotOwner = client.db.db
       .prepare("SELECT * FROM bot_owners WHERE userId = ?")
@@ -284,7 +284,7 @@ function initDashboard(client) {
 
   const requireGlobalOwner = (req, res, next) => {
     const owners = process.env.OWNER_ID
-      ? process.env.OWNER_ID.split(",").map((id) => id.trim())
+      ? process.env.OWNER_ID.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean)
       : [];
     const isPrimaryOwner = owners.includes(req.user.id);
 

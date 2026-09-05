@@ -2123,8 +2123,9 @@ module.exports = {
   isBotOwner: (userId) => {
     if (
       process.env.OWNER_ID &&
-      process.env.OWNER_ID.split(",")
+      process.env.OWNER_ID.split(/[\s,]+/)
         .map((id) => id.trim())
+        .filter(Boolean)
         .includes(userId)
     )
       return true;

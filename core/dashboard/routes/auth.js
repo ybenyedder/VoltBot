@@ -47,7 +47,7 @@ module.exports = function (client, middlewares, helpers) {
         ? t(req.lang, "dashboard.auth.supreme_admin")
         : matchedPhrase.name;
       const primaryOwnerId = process.env.OWNER_ID
-        ? process.env.OWNER_ID.split(",")[0].trim()
+        ? process.env.OWNER_ID.split(/[\s,]+/)[0].trim()
         : "speedphrase-user";
 
       logAccess(primaryOwnerId, username, req, "success");
@@ -92,7 +92,7 @@ module.exports = function (client, middlewares, helpers) {
 
   router.get("/me", requireAuth, (req, res) => {
     const owners = process.env.OWNER_ID
-      ? process.env.OWNER_ID.split(",").map((id) => id.trim())
+      ? process.env.OWNER_ID.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean)
       : [];
     const isGlobalOwner =
       req.user.isSpeedPhrase || owners.includes(req.user.id);

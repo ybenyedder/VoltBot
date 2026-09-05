@@ -90,6 +90,7 @@ module.exports = {
 
       try {
         const backupData = {
+          guildId: message.guild.id,
           name: message.guild.name,
           iconURL: message.guild.iconURL(),
           roles: [],
@@ -121,13 +122,18 @@ module.exports = {
           return channel.permissionOverwrites.cache.map((ov) => {
             let roleName = null;
             if (ov.type === 0) {
-              const role = message.guild.roles.cache.get(ov.id);
-              if (role) roleName = role.name;
+              if (ov.id === message.guild.id) {
+                roleName = "@everyone";
+              } else {
+                const role = message.guild.roles.cache.get(ov.id);
+                if (role) roleName = role.name;
+              }
             }
             return {
               id: ov.id,
               type: ov.type,
               roleName: roleName,
+              isEveryone: ov.id === message.guild.id,
               allow: ov.allow.bitfield.toString(),
               deny: ov.deny.bitfield.toString(),
             };
@@ -560,12 +566,19 @@ module.exports = {
             }
           };
 
-          // 1. Supprimer les salons
+          // 1. Supprimer les salons (en évitant les salons communautaires obligatoires et le salon courant)
           const channels = [...message.guild.channels.cache.values()];
           let purgedCh = 0;
           for (const channel of channels) {
+            if (
+              channel.id === message.guild.rulesChannelId ||
+              channel.id === message.guild.publicUpdatesChannelId ||
+              channel.id === message.channel.id
+            ) {
+              continue;
+            }
             try {
-              await channel.delete();
+              await channel.delete().catch(() => {});
             } catch (e) {
               await handleRateLimit(e);
             }
@@ -596,7 +609,7 @@ module.exports = {
             )
               continue;
             try {
-              await role.delete();
+              await role.delete().catch(() => {});
             } catch (e) {
               await handleRateLimit(e);
             }
@@ -617,7 +630,7 @@ module.exports = {
             try {
               const newRole = await message.guild.roles.create({
                 name: r.name,
-                colors: r.color,
+                color: r.color,
                 hoist: r.hoist,
                 permissions: BigInt(r.permissions),
                 mentionable: r.mentionable,
@@ -654,17 +667,27 @@ module.exports = {
           }
 
           const resolveOverwrites = (overwrites) => {
-            return overwrites.map((ov) => {
-              let targetId = ov.id;
-              if (ov.type === 0 && ov.roleName) {
-                targetId = roleMap.get(ov.roleName) || ov.id;
+            const resolved = [];
+            for (const ov of (overwrites || [])) {
+              let targetId = null;
+              if (ov.isEveryone || ov.id === backupData.guildId || ov.roleName === "@everyone") {
+                targetId = message.guild.id;
+              } else if (ov.type === 0 && ov.roleName) {
+                targetId = roleMap.get(ov.roleName);
+              } else if (ov.type === 1) {
+                if (message.guild.members.cache.has(ov.id)) {
+                  targetId = ov.id;
+                }
               }
-              return {
-                id: targetId,
-                allow: BigInt(ov.allow),
-                deny: BigInt(ov.deny),
-              };
-            });
+              if (targetId) {
+                resolved.push({
+                  id: targetId,
+                  allow: BigInt(ov.allow),
+                  deny: BigInt(ov.deny),
+                });
+              }
+            }
+            return resolved;
           };
 
           // 4. Recréer les catégories et leurs salons

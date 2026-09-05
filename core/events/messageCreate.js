@@ -49,21 +49,89 @@ module.exports = {
           } catch (_) {}
         }
 
-        // Supprimer les 5 derniers messages du membre dans tous les salons
-        const textChannels = message.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased() && c.id !== message.channel.id);
-        let deleted = 0;
+        // 1. Mute (timeout) du membre pendant 5 minutes (300 000 ms)
+        try {
+          const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+          if (member && member.moderatable) {
+            await member.timeout(5 * 60 * 1000, "Honeypot déclenché (Spam bot détecté)").catch(() => {});
+          }
+        } catch (_) {}
+
+        // 2. Supprimer les 10 derniers messages du membre dans tous les salons textuels
+        const textChannels = message.guild.channels.cache.filter(
+          (c) => c.isTextBased && c.isTextBased() && c.id !== message.channel.id
+        );
+        const collectedUserMsgs = [];
         for (const [, ch] of textChannels) {
-          if (deleted >= 5) break;
           try {
             const msgs = await ch.messages.fetch({ limit: 50 });
-            const userMsgs = [...msgs.filter(m => m.author.id === message.author.id).values()].slice(0, 5 - deleted);
-            for (const m of userMsgs) {
-              await m.delete().catch(() => {});
-              deleted++;
-              if (deleted >= 5) break;
+            for (const m of msgs.values()) {
+              if (m.author.id === message.author.id) {
+                collectedUserMsgs.push(m);
+              }
             }
           } catch (_) {}
         }
+
+        // Trier par date décroissante (plus récents en premier) et prendre les 10 derniers
+        collectedUserMsgs.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+        const toDelete = collectedUserMsgs.slice(0, 10);
+
+        // Regrouper par salon pour bulkDelete
+        const msgsByChannel = new Map();
+        for (const m of toDelete) {
+          if (!msgsByChannel.has(m.channel.id)) msgsByChannel.set(m.channel.id, []);
+          msgsByChannel.get(m.channel.id).push(m);
+        }
+
+        for (const [chId, msgs] of msgsByChannel) {
+          const ch = message.guild.channels.cache.get(chId);
+          if (!ch) continue;
+          try {
+            if (msgs.length > 1 && typeof ch.bulkDelete === "function") {
+              const bulkDeleted = await ch.bulkDelete(msgs, true).catch(() => null);
+              if (bulkDeleted) {
+                const deletedIds = new Set(bulkDeleted.keys());
+                const remaining = msgs.filter((m) => !deletedIds.has(m.id));
+                for (const m of remaining) {
+                  await m.delete().catch(() => {});
+                }
+              } else {
+                for (const m of msgs) {
+                  await m.delete().catch(() => {});
+                }
+              }
+            } else {
+              for (const m of msgs) {
+                await m.delete().catch(() => {});
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Logs de modération / antiraid si configuré
+        const logChannelId = guildSettings.modLogsChannel || guildSettings.raidLogsChannel;
+        if (logChannelId) {
+          const logChannel = message.guild.channels.cache.get(logChannelId);
+          if (logChannel) {
+            const lang = guildSettings.language || "fr";
+            const embed = client.embedBuilder.modLog(
+              client,
+              "Honeypot Triggered",
+              message.author,
+              client.user,
+              "Message envoyé dans le salon piège (Honeypot)",
+              [
+                { name: "Sanction", value: "Mute temporaire (5 min)", inline: true },
+                { name: "Messages supprimés", value: `${toDelete.length + 1}`, inline: true },
+                { name: "Salon", value: `<#${message.channel.id}>`, inline: true },
+              ],
+              lang
+            );
+            logChannel.send({ embeds: [embed] }).catch(() => {});
+          }
+        }
+
         return;
       }
 

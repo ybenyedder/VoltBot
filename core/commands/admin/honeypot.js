@@ -7,7 +7,7 @@ async function buildEmbed(count) {
     .setColor(0x000000)           // noir = pas de barre visible sur thème sombre
     .setTitle("DO NOT SEND MESSAGES IN THIS CHANNEL")
     .setDescription(
-      "This channel is used to detect spam bots. Any message sent here will result in your **last 5 messages** being deleted."
+      "This channel is used to detect spam bots. Any message sent here will result in a **5-minute mute** and your **last 10 messages** being deleted."
     )
     .setThumbnail(HONEY_IMG)
     .addFields({
@@ -34,7 +34,11 @@ module.exports = {
   category: "admin",
   usage: "+honeypot [create | set #channel | off]",
   userPerms: [PermissionsBitField.Flags.Administrator],
-  botPerms: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages],
+  botPerms: [
+    PermissionsBitField.Flags.ManageChannels,
+    PermissionsBitField.Flags.ManageMessages,
+    PermissionsBitField.Flags.ModerateMembers,
+  ],
   async execute(client, message, args) {
     const sub = (args[0] || "").toLowerCase();
     const gs = client.db.getGuild(message.guild.id) || {};

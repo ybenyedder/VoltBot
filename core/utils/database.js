@@ -170,6 +170,9 @@ const columnsToAdd = [
   { name: "limits", type: 'TEXT DEFAULT "{}"' },
   { name: "banEdits", type: 'TEXT DEFAULT "[]"' },
   { name: "tempMutes", type: 'TEXT DEFAULT "[]"' },
+  { name: "honeypotChannel", type: "TEXT" },
+  { name: "honeypotCount", type: "INTEGER DEFAULT 0" },
+  { name: "honeypotMessageId", type: "TEXT" },
 ];
 
 try {

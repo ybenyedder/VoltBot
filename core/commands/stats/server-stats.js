@@ -2,7 +2,7 @@ const { EmbedBuilder } = require("discord.js");
 
 module.exports = {
   name: "server-stats",
-  aliases: ["s-stats", "ss", "serverstats"],
+  aliases: ["s-stats", "ss"],
   description: "Affiche les statistiques rapides du serveur.",
   category: "stats",
   usage: "server-stats",

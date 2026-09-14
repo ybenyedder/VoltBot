@@ -137,7 +137,7 @@ module.exports = {
               member.guild.id,
               client,
               guildSettings,
-              "antiNuke",
+              "antiKick",
             );
 
             if (!isExempted) {

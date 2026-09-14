@@ -1,5 +1,6 @@
 const Database = require("better-sqlite3");
 const path = require("path");
+const crypto = require("crypto");
 const Logger = require("./logger");
 
 const instanceDir = process.env.BOT_INSTANCE_CWD || process.cwd();
@@ -14,6 +15,79 @@ const db = new Database(path.join(dataDir, "bot.db"));
 // Garantit que les toggles dashboard prennent effet immédiatement sans
 // imposer une lecture DB à chaque message/event.
 const moduleStatusCache = new Map();
+
+// --- Chiffrement du userToken vanity_snipers (AES-256-GCM) --------------------
+// Le token utilisateur Discord stocké dans `vanity_snipers.userToken` donne un
+// contrôle total sur le compte : il ne doit JAMAIS reposer en clair dans la DB
+// (un simple dump SQLite le compromettrait). Il est chiffré au repos au format
+// `enc:v1:<iv_b64>:<tag_b64>:<cipher_b64>` et déchiffré transparentment à la
+// lecture ; les valeurs héritées non préfixées (plaintext legacy) sont
+// renvoyées telles quelles pour ne rien casser.
+const VANITY_TOKEN_PREFIX = "enc:v1:";
+let vanityTokenKeyCache = null;
+
+function getVanityTokenKey() {
+  // scryptSync est coûteux (~100 ms) : dérivation paresseuse + mémoïsée.
+  if (!vanityTokenKeyCache) {
+    const secret =
+      process.env.VANITY_TOKEN_KEY ||
+      process.env.JWT_SECRET ||
+      "voltbot-fallback-key";
+    vanityTokenKeyCache = crypto.scryptSync(secret, "vanity-token-salt", 32);
+  }
+  return vanityTokenKeyCache;
+}
+
+/**
+ * Chiffre un userToken vanity pour stockage (idempotent : une valeur déjà
+ * au format enc:v1: est renvoyée telle quelle).
+ * @param {string|null} plain
+ * @returns {string|null}
+ */
+function encryptVanityToken(plain) {
+  if (!plain || typeof plain !== "string") return plain;
+  if (plain.startsWith(VANITY_TOKEN_PREFIX)) return plain;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getVanityTokenKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // VANITY_TOKEN_PREFIX finit par ":" -> pas de séparateur avant l'IV
+  return `${VANITY_TOKEN_PREFIX}${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+/**
+ * Déchiffre un userToken vanity lu en base. Une valeur sans préfixe enc:v1:
+ * (plaintext legacy) est renvoyée telle quelle ; un échec de déchiffrement
+ * (clé changée, donnée corrompue) renvoie null au lieu de crasher.
+ * @param {string|null} stored
+ * @returns {string|null}
+ */
+function decryptVanityToken(stored) {
+  if (!stored || typeof stored !== "string" || !stored.startsWith(VANITY_TOKEN_PREFIX)) {
+    return stored; // legacy plaintext : compatibilité
+  }
+  try {
+    const parts = stored.split(":"); // [ "enc", "v1", iv, tag, cipher ]
+    const iv = Buffer.from(parts[2], "base64");
+    const tag = Buffer.from(parts[3], "base64");
+    const data = Buffer.from(parts[4], "base64");
+    if (!iv.length || !tag.length || !data.length) return null;
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getVanityTokenKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+  } catch (e) {
+    Logger.error("[DB] userToken vanity indéchiffrable (clé changée ?):", e.message);
+    return null;
+  }
+}
+
+/** Déchiffre userToken sur une ligne vanity_snipers renvoyée au code appelant. */
+function mapVanitySniperRow(row) {
+  if (row && typeof row.userToken === "string" && row.userToken.startsWith(VANITY_TOKEN_PREFIX)) {
+    return { ...row, userToken: decryptVanityToken(row.userToken) };
+  }
+  return row;
+}
 
 // --- SQLite pragmas (tuning) -------------------------------------------------
 // journal_mode=WAL: concurrent readers + single writer, no reader blocking.
@@ -259,6 +333,53 @@ try {
 } catch (e) {
   Logger.error(
     "[DATABASE] Erreur lors de la migration de la table inventory:",
+    e,
+  );
+}
+
+// Déduplication + contrainte UNIQUE(userId, guildId, item) sur l'inventaire.
+// Historiquement addItem faisait SELECT puis INSERT/UPDATE sans contrainte :
+// des lignes dupliquées (même user/guild/item) pouvaient s'accumuler. On
+// consolide les montants sur la ligne au plus grand rowid, on supprime les
+// autres, puis on pose l'index unique qui garantit l'unicité pour l'upsert
+// atomique d'addItem.
+try {
+  db.transaction(() => {
+    db.prepare(
+      `
+ UPDATE inventory
+ SET amount = (
+ SELECT SUM(d.amount) FROM inventory d
+ WHERE d.userId = inventory.userId
+ AND d.guildId = inventory.guildId
+ AND d.item = inventory.item
+ )
+ WHERE rowid = (
+ SELECT MAX(d.rowid) FROM inventory d
+ WHERE d.userId = inventory.userId
+ AND d.guildId = inventory.guildId
+ AND d.item = inventory.item
+ )
+ `,
+    ).run();
+    db.prepare(
+      `
+ DELETE FROM inventory
+ WHERE rowid < (
+ SELECT MAX(d.rowid) FROM inventory d
+ WHERE d.userId = inventory.userId
+ AND d.guildId = inventory.guildId
+ AND d.item = inventory.item
+ )
+ `,
+    ).run();
+    db.prepare(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_unique ON inventory(userId, guildId, item)",
+    ).run();
+  })();
+} catch (e) {
+  Logger.error(
+    "[DATABASE] Erreur lors de la déduplication de la table inventory :",
     e,
   );
 }
@@ -830,6 +951,9 @@ db.prepare(
     vanityCode TEXT NOT NULL,
     channelId TEXT,
     userId TEXT,
+    -- userToken : stocké chiffré AES-256-GCM (format enc:v1:...), jamais en clair.
+    -- Les écritures passent par setVanitySniper/updateVanitySniper qui chiffrent,
+    -- les lectures (getVanitySniper...) déchiffrent (voir encryptVanityToken).
     userToken TEXT,
     status TEXT DEFAULT 'active',
     checksCount INTEGER DEFAULT 0,
@@ -868,6 +992,7 @@ const migrations = {
     { name: "antiBadWords", type: "INTEGER DEFAULT 0" },
     { name: "antiGif", type: "INTEGER DEFAULT 0" },
     { name: "antiGifPunishment", type: "TEXT DEFAULT'delete'" },
+    { name: "antiLinkOnlyChannels", type: "TEXT DEFAULT'[]'" },
   ],
   giveaways: [
     { name: "winners", type: "TEXT DEFAULT'[]'" },
@@ -1267,13 +1392,15 @@ module.exports = {
       stmtInsertUserDefaults.run(userId, guildId);
       user = stmtGetUser.get(userId, guildId);
     }
-    if (field && user[field]) {
+    if (field !== undefined && field !== null) {
+      // Même pattern que getGuild : retourner la valeur du champ (même falsy :
+      // 0, "" ou NULL) et non la ligne entière.
+      const val = user[field];
+      if (val === undefined || val === null) return null;
       try {
-        return typeof user[field] === "string"
-          ? JSON.parse(user[field])
-          : user[field];
+        return typeof val === "string" ? JSON.parse(val) : val;
       } catch (e) {
-        return user[field];
+        return val;
       }
     }
     return user;
@@ -1436,6 +1563,8 @@ module.exports = {
    * @returns {object} user mis à jour
    */
   addCoins: (userId, guildId, amount) => {
+    if (!Number.isFinite(amount)) return false;
+    amount = Math.max(0, Math.floor(amount));
     db.prepare(
       "UPDATE users SET coins = coins + ? WHERE userId = ? AND guildId = ?",
     ).run(amount, userId, guildId);
@@ -1510,6 +1639,40 @@ module.exports = {
   },
 
   /**
+   * Tente de réclamer la récompense quotidienne (check-and-set atomique).
+   * @param {string} userId
+   * @param {string} guildId
+   * @param {number} cooldownMs - durée du cooldown en millisecondes
+   * @returns {boolean} true si le claim est accordé (timestamp mis à jour)
+   */
+  tryClaimDaily: (userId, guildId, cooldownMs) => {
+    const now = Date.now();
+    const info = db
+      .prepare(
+        "UPDATE users SET dailyTimestamp = ? WHERE userId = ? AND guildId = ? AND (dailyTimestamp IS NULL OR dailyTimestamp <= ?)",
+      )
+      .run(now, userId, guildId, now - cooldownMs);
+    return info.changes > 0;
+  },
+
+  /**
+   * Tente de réclamer le travail (check-and-set atomique).
+   * @param {string} userId
+   * @param {string} guildId
+   * @param {number} cooldownMs - durée du cooldown en millisecondes
+   * @returns {boolean} true si le claim est accordé (timestamp mis à jour)
+   */
+  tryClaimWork: (userId, guildId, cooldownMs) => {
+    const now = Date.now();
+    const info = db
+      .prepare(
+        "UPDATE users SET workTimestamp = ? WHERE userId = ? AND guildId = ? AND (workTimestamp IS NULL OR workTimestamp <= ?)",
+      )
+      .run(now, userId, guildId, now - cooldownMs);
+    return info.changes > 0;
+  },
+
+  /**
    * Définit le solde cash.
    * @param {string} userId
    * @param {string} guildId
@@ -1517,6 +1680,8 @@ module.exports = {
    * @returns {object} user mis à jour
    */
   setCoins: (userId, guildId, amount) => {
+    if (!Number.isFinite(amount)) return false;
+    amount = Math.max(0, Math.floor(amount));
     db.prepare(
       "UPDATE users SET coins = ? WHERE userId = ? AND guildId = ?",
     ).run(amount, userId, guildId);
@@ -1531,6 +1696,8 @@ module.exports = {
    * @returns {object} user mis à jour
    */
   setBank: (userId, guildId, amount) => {
+    if (!Number.isFinite(amount)) return false;
+    amount = Math.max(0, Math.floor(amount));
     db.prepare(
       "UPDATE users SET bank = ? WHERE userId = ? AND guildId = ?",
     ).run(amount, userId, guildId);
@@ -1559,6 +1726,8 @@ module.exports = {
    * @returns {object} user mis à jour
    */
   addBank: (userId, guildId, amount) => {
+    if (!Number.isFinite(amount)) return false;
+    amount = Math.max(0, Math.floor(amount));
     db.prepare(
       "UPDATE users SET bank = bank + ? WHERE userId = ? AND guildId = ?",
     ).run(amount, userId, guildId);
@@ -3218,6 +3387,9 @@ module.exports = {
 
   /**
    * Ajoute (ou incrémente) un item d'inventaire.
+   * Upsert atomique garanti par l'index unique (userId, guildId, item) :
+   * INSERT à la première occurrence, incrément sinon — supprime la course
+   * SELECT/INSERT qui créait des lignes dupliquées.
    * @param {string} userId
    * @param {string} guildId
    * @param {string} item
@@ -3225,46 +3397,25 @@ module.exports = {
    * @returns {object} résultat run()
    */
   addItem: (userId, guildId, item, amount = 1) => {
-    const existing = db
+    return db
       .prepare(
-        "SELECT * FROM inventory WHERE userId = ? AND guildId = ? AND item = ?",
+        `INSERT INTO inventory (userId, guildId, item, amount) VALUES (?, ?, ?, ?)
+         ON CONFLICT(userId, guildId, item) DO UPDATE SET amount = amount + excluded.amount`,
       )
-      .get(userId, guildId, item);
-    if (existing) {
-      return db
-        .prepare("UPDATE inventory SET amount = amount + ? WHERE id = ?")
-        .run(amount, existing.id);
-    } else {
-      return db
-        .prepare(
-          "INSERT INTO inventory (userId, guildId, item, amount) VALUES (?, ?, ?, ?)",
-        )
-        .run(userId, guildId, item, amount);
-    }
+      .run(userId, guildId, item, amount);
   },
 
   /**
-   * Retire un item d'inventaire (supprime la ligne si vidée).
+   * Retire un item d'inventaire (décrément atomique, jamais sous 0 ;
+   * supprime la ligne si vidée).
    * @param {string} userId
    * @param {string} guildId
    * @param {string} item
    * @param {number} [amount=1]
-   * @returns {object|null} résultat run() ou null si introuvable
+   * @returns {{removed:number, remaining:number|null}} quantité réellement retirée
    */
   removeItem: (userId, guildId, item, amount = 1) => {
-    const existing = db
-      .prepare(
-        "SELECT * FROM inventory WHERE userId = ? AND guildId = ? AND item = ?",
-      )
-      .get(userId, guildId, item);
-    if (!existing) return null;
-    if (existing.amount <= amount) {
-      return db.prepare("DELETE FROM inventory WHERE id = ?").run(existing.id);
-    } else {
-      return db
-        .prepare("UPDATE inventory SET amount = amount - ? WHERE id = ?")
-        .run(amount, existing.id);
-    }
+    return txDecrementItem(userId, guildId, item, amount);
   },
 
   /**
@@ -3713,9 +3864,9 @@ module.exports = {
 
   getVanitySniper: (guildId) => {
     try {
-      return (
-        db.prepare("SELECT * FROM vanity_snipers WHERE guildId = ?").get(guildId) || null
-      );
+      const row = db.prepare("SELECT * FROM vanity_snipers WHERE guildId = ?").get(guildId) || null;
+      // userToken déchiffré transparentment (legacy plaintext renvoyé tel quel)
+      return mapVanitySniperRow(row);
     } catch (e) {
       Logger.error("[DB] Error getVanitySniper:", e);
       return null;
@@ -3727,7 +3878,8 @@ module.exports = {
       return (
         db
           .prepare("SELECT * FROM vanity_snipers WHERE status = 'active'")
-          .all() || []
+          .all()
+          .map(mapVanitySniperRow) || []
       );
     } catch (e) {
       Logger.error("[DB] Error getAllActiveVanitySnipers:", e);
@@ -3738,6 +3890,8 @@ module.exports = {
   setVanitySniper: (guildId, data) => {
     try {
       const now = Date.now();
+      // userToken chiffré au repos avant écriture (idempotent si déjà enc:v1:)
+      const storedUserToken = data.userToken ? encryptVanityToken(String(data.userToken)) : null;
       return db
         .prepare(
           `
@@ -3760,7 +3914,7 @@ module.exports = {
           data.vanityCode,
           data.channelId || null,
           data.userId || null,
-          data.userToken || null,
+          storedUserToken,
           now,
           now,
         );
@@ -3775,8 +3929,10 @@ module.exports = {
       const fields = [];
       const values = [];
       for (const [key, val] of Object.entries(updates)) {
+        if (!/^[a-zA-Z0-9_]+$/.test(key)) continue; // Prévention SQLi
         fields.push(`${key} = ?`);
-        values.push(val);
+        // userToken : chiffré avant écriture (idempotent si déjà enc:v1:)
+        values.push(key === "userToken" ? encryptVanityToken(val) : val);
       }
       if (fields.length === 0) return null;
       values.push(guildId);

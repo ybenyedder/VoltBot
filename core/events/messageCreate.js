@@ -20,6 +20,16 @@ module.exports = {
       // Ignorer les messages des bots et en DM
       if (message.author?.bot || !message.guild) return;
 
+      // Blacklist globale: l'utilisateur ne peut exécuter aucune commande
+      // (check au plus tôt — avant l'automod, les drops et l'XP, pour qu'un
+      // utilisateur blacklisté ne gagne ni XP ni coins).
+      if (
+        typeof client.db.isBlacklisted === "function" &&
+        client.db.isBlacklisted(message.author.id)
+      ) {
+        return;
+      }
+
       // Récupérer la configuration du serveur (cache partagé client — invalidé par le dashboard)
       let guildSettings = client.guildSettingsCache.get(message.guild.id);
       if (!guildSettings) {
@@ -30,6 +40,7 @@ module.exports = {
       // --- HONEYPOT ---
       if (guildSettings.honeypotChannel && message.channel.id === guildSettings.honeypotChannel) {
         await message.delete().catch(() => {});
+        const lang = guildSettings.language || "fr";
 
         // Incrémenter le compteur
         client.db.db.prepare("UPDATE guilds SET honeypotCount = COALESCE(honeypotCount,0) + 1 WHERE guildId = ?").run(message.guild.id);
@@ -53,78 +64,43 @@ module.exports = {
         try {
           const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
           if (member && member.moderatable) {
-            await member.timeout(5 * 60 * 1000, "Honeypot déclenché (Spam bot détecté)").catch(() => {});
+            await member.timeout(5 * 60 * 1000, t(lang, "events.honeypot.timeout_reason")).catch(() => {});
           }
         } catch (_) {}
 
-        // 2. Supprimer les 10 derniers messages du membre dans tous les salons textuels
-        const textChannels = message.guild.channels.cache.filter(
-          (c) => c.isTextBased && c.isTextBased() && c.id !== message.channel.id
-        );
-        const collectedUserMsgs = [];
-        for (const [, ch] of textChannels) {
-          try {
-            const msgs = await ch.messages.fetch({ limit: 50 });
-            for (const m of msgs.values()) {
-              if (m.author.id === message.author.id) {
-                collectedUserMsgs.push(m);
-              }
-            }
-          } catch (_) {}
-        }
-
-        // Trier par date décroissante (plus récents en premier) et prendre les 10 derniers
-        collectedUserMsgs.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
-        const toDelete = collectedUserMsgs.slice(0, 10);
-
-        // Regrouper par salon pour bulkDelete
-        const msgsByChannel = new Map();
-        for (const m of toDelete) {
-          if (!msgsByChannel.has(m.channel.id)) msgsByChannel.set(m.channel.id, []);
-          msgsByChannel.get(m.channel.id).push(m);
-        }
-
-        for (const [chId, msgs] of msgsByChannel) {
-          const ch = message.guild.channels.cache.get(chId);
-          if (!ch) continue;
-          try {
-            if (msgs.length > 1 && typeof ch.bulkDelete === "function") {
-              const bulkDeleted = await ch.bulkDelete(msgs, true).catch(() => null);
-              if (bulkDeleted) {
-                const deletedIds = new Set(bulkDeleted.keys());
-                const remaining = msgs.filter((m) => !deletedIds.has(m.id));
-                for (const m of remaining) {
-                  await m.delete().catch(() => {});
-                }
-              } else {
-                for (const m of msgs) {
-                  await m.delete().catch(() => {});
-                }
-              }
-            } else {
-              for (const m of msgs) {
-                await m.delete().catch(() => {});
-              }
-            }
-          } catch (_) {}
-        }
+        // 2. Purge ciblée : seuls les messages du raidleur dans le salon
+        // honeypot lui-même sont supprimés (les messages du raid y
+        // atterrissent) — pas de balayage de tous les salons textuels, trop
+        // coûteux. Limité aux 50 derniers messages du salon.
+        let purgedCount = 0;
+        try {
+          const recentMsgs = await message.channel.messages.fetch({ limit: 50 });
+          const raidMsgs = [...recentMsgs.values()].filter(
+            (m) => m.author.id === message.author.id,
+          );
+          purgedCount = raidMsgs.length;
+          if (raidMsgs.length > 1) {
+            await message.channel.bulkDelete(raidMsgs, true).catch(() => {});
+          } else if (raidMsgs.length === 1) {
+            await raidMsgs[0].delete().catch(() => {});
+          }
+        } catch (_) {}
 
         // Logs de modération / antiraid si configuré
         const logChannelId = guildSettings.modLogsChannel || guildSettings.raidLogsChannel;
         if (logChannelId) {
           const logChannel = message.guild.channels.cache.get(logChannelId);
           if (logChannel) {
-            const lang = guildSettings.language || "fr";
             const embed = client.embedBuilder.modLog(
               client,
-              "Honeypot Triggered",
+              t(lang, "events.honeypot.log_action"),
               message.author,
               client.user,
-              "Message envoyé dans le salon piège (Honeypot)",
+              t(lang, "events.honeypot.log_reason"),
               [
-                { name: "Sanction", value: "Mute temporaire (5 min)", inline: true },
-                { name: "Messages supprimés", value: `${toDelete.length + 1}`, inline: true },
-                { name: "Salon", value: `<#${message.channel.id}>`, inline: true },
+                { name: t(lang, "events.honeypot.field_sanction"), value: t(lang, "events.honeypot.sanction_value"), inline: true },
+                { name: t(lang, "events.honeypot.field_deleted"), value: `${purgedCount + 1}`, inline: true },
+                { name: t(lang, "events.honeypot.field_channel"), value: `<#${message.channel.id}>`, inline: true },
               ],
               lang
             );
@@ -288,16 +264,20 @@ module.exports = {
                   curLevel,
                   lang,
                 );
-                channel.send({
-                  content: `<@${message.author.id}>`,
-                  files: [card],
-                  allowedMentions: { users: [message.author.id] },
-                });
+                channel
+                  .send({
+                    content: `<@${message.author.id}>`,
+                    files: [card],
+                    allowedMentions: { users: [message.author.id] },
+                  })
+                  .catch(() => {});
               } catch (e) {
-                channel.send({
-                  content: `<@${message.author.id}>`,
-                  allowedMentions: { users: [message.author.id] },
-                });
+                channel
+                  .send({
+                    content: `<@${message.author.id}>`,
+                    allowedMentions: { users: [message.author.id] },
+                  })
+                  .catch(() => {});
               }
             }
           }
@@ -315,14 +295,7 @@ module.exports = {
       }
 
       // --- SYSTÈME DE COMMANDES ---
-      // Blacklist globale: l'utilisateur ne peut exécuter aucune commande.
-      if (
-        typeof client.db.isBlacklisted === "function" &&
-        client.db.isBlacklisted(message.author.id)
-      ) {
-        return;
-      }
-
+      // (le check blacklist global est fait en tête de handler)
       const args = message.content.slice(prefix.length).trim().split(/ +/);
       const commandName = args.shift().toLowerCase();
 

@@ -47,7 +47,7 @@ module.exports = {
     if (win) {
       client.db.addCoins(message.author.id, message.guild.id, bet);
     } else {
-      client.db.addCoins(message.author.id, message.guild.id, -bet);
+      client.db.removeCoins(message.author.id, message.guild.id, bet);
     }
 
     const helper = win

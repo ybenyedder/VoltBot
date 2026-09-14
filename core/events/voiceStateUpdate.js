@@ -25,24 +25,41 @@ module.exports = {
         vmConfig &&
         newState.channelId === vmConfig.hubChannelId
       ) {
-        const newVc = await newState.guild.channels.create({
-          name: `${newState.member.user.username}`,
-          type: ChannelType.GuildVoice,
-          parent: vmConfig.categoryId || newState.channel?.parentId,
-          permissionOverwrites: [
-            {
-              id: newState.member.user.id,
-              allow: ["Connect", "ManageChannels", "MoveMembers"],
-            },
-            { id: newState.guild.id, allow: ["Connect"] },
-          ],
-        });
-        await newState.member.voice.setChannel(newVc);
-        client.db.createVoiceMasterChannel(
-          newVc.id,
-          newState.guild.id,
-          newState.member.user.id,
-        );
+        // Throttle: 5s par utilisateur pour empêcher le spam de création
+        // (même mécanisme que le TempVC ci-dessous).
+        if (!client.voicemasterCooldowns) client.voicemasterCooldowns = new Map();
+        const userId = newState.member.user.id;
+        const last = client.voicemasterCooldowns.get(userId) || 0;
+        const now = Date.now();
+        if (now - last < 5000) {
+          await newState.member.voice.disconnect().catch(() => {});
+        } else {
+          // Purge opportuniste des entrées obsolètes (> 60s) pour que la Map
+          // reste bornée.
+          for (const [uid, ts] of client.voicemasterCooldowns) {
+            if (now - ts > 60000) client.voicemasterCooldowns.delete(uid);
+          }
+          client.voicemasterCooldowns.set(userId, now);
+
+          const newVc = await newState.guild.channels.create({
+            name: `${newState.member.user.username}`,
+            type: ChannelType.GuildVoice,
+            parent: vmConfig.categoryId || newState.channel?.parentId,
+            permissionOverwrites: [
+              {
+                id: newState.member.user.id,
+                allow: ["Connect", "ManageChannels", "MoveMembers"],
+              },
+              { id: newState.guild.id, allow: ["Connect"] },
+            ],
+          });
+          await newState.member.voice.setChannel(newVc);
+          client.db.createVoiceMasterChannel(
+            newVc.id,
+            newState.guild.id,
+            newState.member.user.id,
+          );
+        }
       }
 
       if (oldState.channelId) {
@@ -455,7 +472,7 @@ module.exports = {
                 }),
               )
               .setColor("#43b581");
-            logsChannel.send({ embeds: [embed] });
+            logsChannel.send({ embeds: [embed] }).catch(() => {});
           } else if (oldState.channelId && !newState.channelId) {
             // Leave or Disconnect
             let executor = null;
@@ -488,7 +505,7 @@ module.exports = {
                 }),
               )
               .setColor("#f04747");
-            logsChannel.send({ embeds: [embed] });
+            logsChannel.send({ embeds: [embed] }).catch(() => {});
           } else if (
             oldState.channelId &&
             newState.channelId &&
@@ -527,7 +544,7 @@ module.exports = {
                 }),
               )
               .setColor("#7289da");
-            logsChannel.send({ embeds: [embed] });
+            logsChannel.send({ embeds: [embed] }).catch(() => {});
           }
         }
       }

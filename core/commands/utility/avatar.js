@@ -1,6 +1,6 @@
 module.exports = {
   name: "avatar",
-  aliases: ["av", "pp", "pdp"],
+  aliases: ["av", "pdp"],
   description: "Affiche l'avatar (photo de profil) d'un utilisateur.",
   category: "utility",
   usage: "+avatar [@user]",

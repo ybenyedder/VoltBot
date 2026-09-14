@@ -1,7 +1,9 @@
 const Logger = require("../../utils/logger");
 const { t } = require("../../utils/i18n");
+const crypto = require("crypto");
 const {
   PermissionsBitField,
+  PermissionFlagsBits,
   ChannelType,
   ActionRowBuilder,
   ButtonBuilder,
@@ -275,7 +277,13 @@ const handleCaptchaInteractions = async (interaction, client) => {
         });
       }
 
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      // Code captcha généré via crypto.randomInt (non prévisible, contrairement
+      // à Math.random) depuis un alphabet sans caractères ambigus (0/O, 1/l/I).
+      const CAPTCHA_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const code = Array.from(
+        { length: 6 },
+        () => CAPTCHA_ALPHABET[crypto.randomInt(CAPTCHA_ALPHABET.length)],
+      ).join("");
 
       const canvas = Canvas.createCanvas(200, 100);
       const ctx = canvas.getContext("2d");
@@ -919,14 +927,10 @@ const handleTicketOptionInteraction = async (interaction, client) => {
 // Handler pour le panel d'administration des tickets (ticketgui)
 const handleTicketGUIPanelInteractions = async (interaction, client) => {
   try {
-    const permissions = require("../../utils/permissions");
-
     if (interaction.isButton() && interaction.customId === "ticketgui_deploy") {
       if (
-        !permissions.isAdmin(
-          { author: interaction.user, member: interaction.member },
-          client,
-        )
+        !interaction.memberPermissions ||
+        !interaction.memberPermissions.has(PermissionFlagsBits.Administrator)
       )
         return interaction.reply({
           content: interaction.t("interactions.tickets.gui_admin_only"),
@@ -954,12 +958,13 @@ const handleTicketGUIPanelInteractions = async (interaction, client) => {
       interaction.customId === "ticketgui_select_channel"
     ) {
       if (
-        !permissions.isAdmin(
-          { author: interaction.user, member: interaction.member },
-          client,
-        )
+        !interaction.memberPermissions ||
+        !interaction.memberPermissions.has(PermissionFlagsBits.Administrator)
       )
-        return;
+        return interaction.reply({
+          content: interaction.t("interactions.tickets.gui_admin_only"),
+          flags: [MessageFlags.Ephemeral],
+        });
 
       const targetChannelId = interaction.values[0];
       const targetChannel =
@@ -1052,12 +1057,13 @@ const handleTicketGUIPanelInteractions = async (interaction, client) => {
 
     if (interaction.isButton() && interaction.customId === "ticketgui_addopt") {
       if (
-        !permissions.isAdmin(
-          { author: interaction.user, member: interaction.member },
-          client,
-        )
+        !interaction.memberPermissions ||
+        !interaction.memberPermissions.has(PermissionFlagsBits.Administrator)
       )
-        return;
+        return interaction.reply({
+          content: interaction.t("interactions.tickets.gui_admin_only"),
+          flags: [MessageFlags.Ephemeral],
+        });
 
       const ticketAddCmd = client.commands.get("ticketaddoption");
       if (!ticketAddCmd)
@@ -1082,12 +1088,13 @@ const handleTicketGUIPanelInteractions = async (interaction, client) => {
 
     if (interaction.isButton() && interaction.customId === "ticketgui_delopt") {
       if (
-        !permissions.isAdmin(
-          { author: interaction.user, member: interaction.member },
-          client,
-        )
+        !interaction.memberPermissions ||
+        !interaction.memberPermissions.has(PermissionFlagsBits.Administrator)
       )
-        return;
+        return interaction.reply({
+          content: interaction.t("interactions.tickets.gui_admin_only"),
+          flags: [MessageFlags.Ephemeral],
+        });
 
       try {
         const optionsRow = client.db.db
@@ -1132,12 +1139,13 @@ const handleTicketGUIPanelInteractions = async (interaction, client) => {
       interaction.customId === "ticketgui_select_del"
     ) {
       if (
-        !permissions.isAdmin(
-          { author: interaction.user, member: interaction.member },
-          client,
-        )
+        !interaction.memberPermissions ||
+        !interaction.memberPermissions.has(PermissionFlagsBits.Administrator)
       )
-        return;
+        return interaction.reply({
+          content: interaction.t("interactions.tickets.gui_admin_only"),
+          flags: [MessageFlags.Ephemeral],
+        });
 
       const optId = interaction.values[0].replace("delopt_", "");
       client.db.db

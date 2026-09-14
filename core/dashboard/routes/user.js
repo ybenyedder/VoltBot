@@ -63,14 +63,27 @@ module.exports = function (client, middlewares, helpers) {
           JSON.stringify(userGuilds),
         );
 
+        // Bug B-2 (audit) : on ne sert JAMAIS le cache périmé après avoir
+        // effacé les cookies. Si l'access token Discord est expiré (401), on
+        // retourne un 401 clair — le client redirigera vers /login pour
+        // relancer le flux OAuth.
         if (response.status === 401) {
           res.clearCookie("token");
-          res.clearCookie("discord_access_token");
+          // Cookie posé avec path /api : le clearCookie doit le préciser
+          // pour être réellement appliqué par le navigateur.
+          res.clearCookie("discord_access_token", { path: "/api" });
+          return res.status(401).json({
+            error: "Session Discord expirée, reconnecte-toi.",
+            code: "DISCORD_TOKEN_EXPIRED",
+          });
         }
 
+        // Erreur passagère de l'API Discord (5xx, rate-limit...) : là, le
+        // cache reste servi — les cookies sont intacts, la session est
+        // toujours valide.
         if (cachedData) {
           Logger.warn(
-            `[DASHBOARD CACHE] Erreur API, service du cache expiré pour ${userId}`,
+            `[DASHBOARD CACHE] Erreur API Discord (${response.status}), service du cache expiré pour ${userId}`,
           );
           return res.json(cachedData.guilds);
         }

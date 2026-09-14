@@ -17,7 +17,13 @@ function parseJsonArray(value) {
 }
 
 function shuffle(values) {
-  return [...values].sort(() => Math.random() - 0.5);
+  // Fisher-Yates : sort(() => Math.random() - 0.5) est biaisé et non uniforme.
+  const out = [...values];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 const nfFr = new Intl.NumberFormat("fr-FR");
@@ -421,4 +427,5 @@ module.exports = {
   buildGiveawayEmbed,
   buildGiveawayRow,
   parseJsonArray,
+  shuffle,
 };

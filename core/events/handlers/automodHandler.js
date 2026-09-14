@@ -2,6 +2,7 @@ const logger = require("../../utils/logger");
 const permissions = require("../../utils/permissions");
 const { sendEphemeralReply } = require("../../utils/ephemeralReply");
 const { buildMatchers, findBadword } = require("../../utils/badwords");
+const { createLinkRegex } = require("./linkRegex");
 
 // Caches simples pour éviter les accès DB et JSON.parse répétitifs
 const antiraidCache = new Map();
@@ -38,13 +39,20 @@ const handleAutomod = async (message, client, guildSettings) => {
       mentionLimit: 5,
       muteDuration: 300000,
     };
-    // Pre-parse les canaux ignorés pour gagner du temps
-    const ignoredChannelsJson = Array.isArray(antiraid.antiLinkIgnoredChannels)
-      ? JSON.stringify(antiraid.antiLinkIgnoredChannels)
-      : (antiraid.antiLinkIgnoredChannels ?? "[]");
-    antiraid._ignoredLinks = JSON.parse(
-      ignoredChannelsJson === "" ? "[]" : ignoredChannelsJson,
-    );
+    // Pre-parse les listes de salons (ignorés / spécifiques) pour gagner du temps
+    const parseChannelList = (raw) => {
+      try {
+        const json = Array.isArray(raw) ? JSON.stringify(raw) : raw ?? "[]";
+        const parsed = JSON.parse(json === "" ? "[]" : json);
+        return Array.isArray(parsed)
+          ? parsed.filter((v) => typeof v === "string")
+          : [];
+      } catch (e) {
+        return [];
+      }
+    };
+    antiraid._ignoredLinks = parseChannelList(antiraid.antiLinkIgnoredChannels);
+    antiraid._onlyLinks = parseChannelList(antiraid.antiLinkOnlyChannels);
     antiraidCache.set(guildId, antiraid);
   }
 
@@ -61,11 +69,17 @@ const handleAutomod = async (message, client, guildSettings) => {
       "antiLink",
     )
   ) {
-    if (!antiraid._ignoredLinks.includes(message.channel.id)) {
+    // Mode « salons spécifiques » : si la liste est remplie, l'anti-link
+    // ne s'applique QUE dans ces salons, sinon partout sauf les ignorés
+    const linkAppliesHere =
+      antiraid._onlyLinks.length > 0
+        ? antiraid._onlyLinks.includes(message.channel.id)
+        : !antiraid._ignoredLinks.includes(message.channel.id);
+    if (linkAppliesHere) {
       const inviteRegex =
         /(discord\.gg\/[^\s]+|discord\.com\/invite\/[^\s]+|discordapp\.com\/invite\/[^\s]+|dsc\.gg\/[^\s]+|invite\.gg\/[^\s]+)/gi;
-      const linkRegex =
-        /(https?:\/\/[^\s]+|bit\.ly\/[^\s]+|[a-zA-Z0-9-]+\.[a-z]{2,})/gi;
+      // Regex partagée avec messageUpdate (source unique, version stricte)
+      const linkRegex = createLinkRegex();
       const gifUrlExclude =
         /(tenor\.com\/view\/|giphy\.com\/gifs\/|media\.tenor\.com|media\.giphy\.com|\.gif(\?|$|\s))/i;
 
@@ -103,7 +117,8 @@ const handleAutomod = async (message, client, guildSettings) => {
               action: actionStr,
             }),
           })
-          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+          .catch(() => {});
         return true;
       }
     }
@@ -149,7 +164,8 @@ const handleAutomod = async (message, client, guildSettings) => {
               action: actionStr,
             }),
           })
-          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+          .catch(() => {});
         return true;
       }
     }
@@ -220,7 +236,8 @@ const handleAutomod = async (message, client, guildSettings) => {
               action: actionStr,
             }),
           })
-          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+          .catch(() => {});
         return true;
       } else {
         userSpam.count = 0;
@@ -232,7 +249,8 @@ const handleAutomod = async (message, client, guildSettings) => {
               user: message.author,
             }),
           })
-          .then((m) => setTimeout(() => m.delete().catch(() => {}), 5000));
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 5000))
+          .catch(() => {});
         return true;
       }
     }
@@ -300,7 +318,8 @@ const handleAutomod = async (message, client, guildSettings) => {
             action: actionStr,
           }),
         })
-        .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+        .catch(() => {});
       return true;
     }
   }
@@ -331,7 +350,8 @@ const handleAutomod = async (message, client, guildSettings) => {
             action: actionStr,
           }),
         })
-        .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+        .catch(() => {});
       return true;
     }
   }

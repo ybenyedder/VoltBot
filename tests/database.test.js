@@ -89,3 +89,89 @@ describe("database.js — mute presets CRUD", () => {
     expect(db.delMutePreset(G, "short")).toBe(false);
   });
 });
+
+describe("database.js — economy helpers", () => {
+  const G = "guild-econ";
+
+  it("getUser(field) returns falsy field values (coins=0 → 0), not the row", () => {
+    const coins = db.getUser("user-econ-a", G, "coins");
+    expect(coins).toBe(0); // valeur du champ, même falsy — pas la ligne entière
+    expect(coins).not.toBeInstanceOf(Object);
+
+    const row = db.getUser("user-econ-a", G);
+    expect(row).toBeInstanceOf(Object); // sans champ : la ligne complète
+    expect(row.coins).toBe(0);
+  });
+
+  it("addCoins credits the balance and returns the updated user", () => {
+    db.getUser("user-econ-b", G); // addCoins ne crée pas la ligne : caller la garantit
+    const u = db.addCoins("user-econ-b", G, 150);
+    expect(u.coins).toBe(150);
+    expect(db.getUser("user-econ-b", G, "coins")).toBe(150);
+  });
+
+  it("addCoins rejects NaN/Infinity (returns false, balance untouched)", () => {
+    db.getUser("user-econ-c", G);
+    db.addCoins("user-econ-c", G, 100);
+    expect(db.addCoins("user-econ-c", G, NaN)).toBe(false);
+    expect(db.addCoins("user-econ-c", G, Infinity)).toBe(false);
+    expect(db.getUser("user-econ-c", G, "coins")).toBe(100); // solde inchangé
+  });
+
+  it("addCoins clamps negative amounts to 0 (balance untouched)", () => {
+    db.getUser("user-econ-d", G);
+    db.addCoins("user-econ-d", G, 100);
+    const u = db.addCoins("user-econ-d", G, -50);
+    expect(db.getUser("user-econ-d", G, "coins")).toBe(100); // solde inchangé
+    expect(u.coins).toBe(100);
+  });
+
+  it("removeCoins clamps the balance at 0", () => {
+    db.getUser("user-econ-e", G);
+    db.addCoins("user-econ-e", G, 30);
+    expect(db.removeCoins("user-econ-e", G, 100).coins).toBe(0); // 30-100 → 0
+    db.addCoins("user-econ-e", G, 10); // 0 + 10
+    expect(db.removeCoins("user-econ-e", G, 4).coins).toBe(6); // débit normal
+  });
+
+  it("addItem upserts: two adds of the same item → one row, amount summed", () => {
+    db.addItem("user-econ-f", G, "sword", 3);
+    db.addItem("user-econ-f", G, "sword", 2);
+
+    let inv = db.getInventory("user-econ-f", G);
+    expect(inv.length).toBe(1); // une seule ligne grâce à l'upsert
+    expect(inv[0].item).toBe("sword");
+    expect(inv[0].amount).toBe(5); // 3 + 2 cumulés
+
+    db.addItem("user-econ-f", G, "shield", 1); // un autre item → 2e ligne
+    inv = db.getInventory("user-econ-f", G);
+    expect(inv.length).toBe(2);
+  });
+
+  it("tryClaimDaily: 1st claim true, immediate 2nd false, true after cooldown expiry", () => {
+    vi.useFakeTimers();
+    try {
+      const day = 24 * 60 * 60 * 1000;
+      const U = "user-econ-g";
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z").getTime());
+      db.getUser(U, G); // garantit la ligne (dailyTimestamp DEFAULT 0 → claimable)
+
+      expect(db.tryClaimDaily(U, G, day)).toBe(true); // 1er claim accordé
+      expect(db.getUser(U, G, "dailyTimestamp")).toBe(
+        new Date("2026-01-01T00:00:00.000Z").getTime(),
+      );
+
+      expect(db.tryClaimDaily(U, G, day)).toBe(false); // ré-claim immédiat refusé
+
+      // Mi-chemin du cooldown : encore refusé
+      vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z").getTime());
+      expect(db.tryClaimDaily(U, G, day)).toBe(false);
+
+      // Cooldown expiré (+24h01) : accordé
+      vi.setSystemTime(new Date("2026-01-02T00:00:01.000Z").getTime());
+      expect(db.tryClaimDaily(U, G, day)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

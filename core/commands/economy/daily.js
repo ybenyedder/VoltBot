@@ -14,8 +14,8 @@ module.exports = {
     const cooldown = 86400000;
     const daily = user.dailyTimestamp;
 
-    if (daily !== null && cooldown - (Date.now() - daily) > 0) {
-      const readyAt = Math.floor((daily + cooldown) / 1000);
+    const replyCooldown = (timestamp) => {
+      const readyAt = Math.floor(((timestamp || 0) + cooldown) / 1000);
       const embed = client.embedBuilder
         .warning(client, message.t("commands.daily.already_claimed"))
         .addFields({
@@ -24,13 +24,23 @@ module.exports = {
           inline: true,
         });
       return message.reply({ embeds: [embed] }).catch(() => {});
+    };
+
+    if (daily !== null && cooldown - (Date.now() - daily) > 0) {
+      return replyCooldown(daily);
+    }
+
+    // Claim atomique : le crédit n'a lieu que si le timestamp a été réservé,
+    // ce qui empêche le double-claim lors de deux commandes concurrentes.
+    if (
+      !client.db.tryClaimDaily(message.author.id, message.guild.id, cooldown)
+    ) {
+      const fresh = client.db.getUser(message.author.id, message.guild.id);
+      return replyCooldown(fresh.dailyTimestamp);
     }
 
     const amount = Math.floor(Math.random() * (max - min + 1)) + min;
     client.db.addCoins(message.author.id, message.guild.id, amount);
-    client.db.updateUser(message.author.id, message.guild.id, {
-      dailyTimestamp: Date.now(),
-    });
 
     const updated = client.db.getUser(message.author.id, message.guild.id);
     const embed = client.embedBuilder

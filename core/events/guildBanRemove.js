@@ -53,8 +53,11 @@ module.exports = {
       }
 
       // --- ANTIRAID PROTECTION ---
+      // Gate par module antiraid (toggle dashboard) — le re-ban et la sanction
+      // sont désactivés ensemble. Redondant avec la gate de processSanction.
       const config = client.db.getAntiraidConfig(ban.guild.id);
       if (
+        client.db.isModuleEnabled(ban.guild.id, "antiraid") &&
         config &&
         (config.antiUnban > 0 || config.antiNuke > 0) &&
         executor &&
@@ -66,7 +69,7 @@ module.exports = {
             ban.guild.id,
             client,
             gs,
-            "antiNuke",
+            "antiUnban",
           )
         ) {
           // Anti-Nuke counter for Unbans

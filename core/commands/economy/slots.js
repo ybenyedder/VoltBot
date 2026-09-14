@@ -53,8 +53,16 @@ module.exports = {
         "SELECT * FROM inventory WHERE userId = ? AND guildId = ? AND item = ?",
       )
       .get(message.author.id, message.guild.id, "lucky_charm");
-    if (luckyCharm && luckyCharm.amount > 0 && Math.random() > 0.6)
+    if (luckyCharm && luckyCharm.amount > 0 && Math.random() > 0.6) {
       slot2 = slot1;
+      // L'effet se déclenche : le charm est consommé (buff non permanent).
+      client.db.decrementItem(
+        message.author.id,
+        message.guild.id,
+        "lucky_charm",
+        1,
+      );
+    }
 
     const balanceAfter = () => {
       const u = client.db.getUser(message.author.id, message.guild.id);

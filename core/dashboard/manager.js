@@ -14,7 +14,11 @@ const { PermissionsBitField } = require("discord.js");
  */
 function initDashboard(client) {
   const app = express();
-  app.set("trust proxy", 1);
+  // trust proxy ne doit être activé QUE derrière un reverse proxy connu :
+  // sinon un client LAN peut spoofer X-Forwarded-For et contourner les
+  // rate-limits basés sur req.ip.
+  if (process.env.TRUST_PROXY)
+    app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
 
   // Correlation ID — attach a short random reqId to every request so we can
   // tie logs to user-reported bugs. Must run before anything that may log/error.
@@ -99,19 +103,24 @@ function initDashboard(client) {
         const dashboardUrl = (
           process.env.DASHBOARD_URL || "http://localhost:5173"
         ).replace(/\/$/, "");
-        const allowed = [
-          dashboardUrl,
-          "https://dashboard.webtvmedia.net",
-          "http://localhost:5173",
-          "http://localhost:5174",
-          "http://localhost:5175",
-          "http://localhost:3000",
-          "http://localhost:3001",
-          "http://localhost:3002",
-          "http://localhost:3003",
-          "http://localhost:3004",
-          "http://localhost:3005",
-        ];
+        const allowed = [dashboardUrl, "https://dashboard.webtvmedia.net"];
+
+        // Origines locales de développement : autorisées uniquement hors
+        // production pour qu'un déploiement prod avec credentials ne puisse
+        // jamais être requêté depuis une origine localhost.
+        if (process.env.NODE_ENV !== "production") {
+          allowed.push(
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://localhost:5175",
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "http://localhost:3003",
+            "http://localhost:3004",
+            "http://localhost:3005",
+          );
+        }
 
         if (!origin || allowed.includes(origin.replace(/\/$/, ""))) {
           callback(null, true);
@@ -202,6 +211,8 @@ function initDashboard(client) {
   app.use("/api/guilds/:guildId/badwords", destructiveLimiter);
   app.use("/api/guilds/:guildId/economy/shop", destructiveLimiter);
   app.use("/api/guilds/:guildId/levels/roles", destructiveLimiter);
+  // Backups : la restauration supprime tous les salons/rôles du serveur.
+  app.use("/api/guilds/:guildId/backups", destructiveLimiter);
   app.use("/api/system/speedphrases", destructiveLimiter);
 
   const dashboardDistPath = path.join(__dirname, "../../dashboard-client/dist");

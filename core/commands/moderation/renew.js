@@ -3,7 +3,7 @@ const logger = require("../../utils/logger");
 
 module.exports = {
   name: "renew",
-  aliases: ["nuke"],
+  aliases: [],
   description:
     "Clone un salon et supprime l'ancien instanément pour l'effacer.",
   category: "moderation",

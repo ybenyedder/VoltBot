@@ -8,25 +8,53 @@ on:
 
 jobs:
   test:
-    name: Lint & Tests
+    name: Lint & Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Le README annonce Node 18+ : on teste le minimum et le LTS courant.
+        node-version: [18, 20]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      # npm run lint = node --check (syntaxe) puis eslint core/ start.js.
+      # Échoue si l'un des deux échoue.
       - name: Lint
         run: npm run lint
 
+      # Informatif uniquement : ne bloque pas la CI en cas de vulnérabilité
+      # haute signalée (suivi à traiter séparément).
+      - name: Security audit (informative)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
       - name: Tests
         run: npm test
+
+  secrets:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: docker://zricethezav/gitleaks:latest
+        with:
+          # --no-git : scanne les fichiers du checkout (pas l'historique),
+          # --redact : masque les secrets détectés dans les logs.
+          args: detect --no-git --verbose --redact
 
   build-dashboard:
     name: Build dashboard

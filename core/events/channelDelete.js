@@ -97,45 +97,50 @@ module.exports = {
           const nukeLimit = config.nukeChannelLimit || 3;
           const isNuke = config.antiNuke > 0 && userData.count >= nukeLimit;
 
-          const member = await channel.guild.members
-            .fetch(executor.id)
-            .catch(() => null);
-          if (member) {
-            const actionResult = await client.utils.antiraid.processSanction(
-              member,
-              "antiChannel",
-              t(lang, "events.channelDelete.sanction_reason"),
-              client,
-            );
-            logger.event(
-              `[ANTI-CHANNEL] ${executor.tag} sanctionné — suppression de salon : ${actionResult}`,
-            );
-
-            // Recréer le salon supprimé
-            const permissionOverwrites =
-              log?.changes?.find((c) => c.key === "permission_overwrites")
-                ?.new || [];
-            await channel.guild.channels
-              .create({
-                name: channel.name,
-                type: channel.type,
-                position: channel.position,
-                parent: channel.parentId,
-                permissionOverwrites: permissionOverwrites.map((o) => ({
-                  id: o.id,
-                  allow: o.allow,
-                  deny: o.deny,
-                  type: o.type,
-                })),
-                topic: channel.topic,
-                rtcRegion: channel.rtcRegion,
-                userLimit: channel.userLimit,
-              })
-              .catch((e) =>
-                logger.warn(
-                  `[ANTI-CHANNEL] Impossible de recréer le salon: ${e.message}`,
-                ),
+          // Sanction uniquement en mode max (2) ou si le seuil nuke est atteint,
+          // et non dès la première suppression.
+          if (config.antiChannel === 2 || isNuke) {
+            const member = await channel.guild.members
+              .fetch(executor.id)
+              .catch(() => null);
+            if (member) {
+              const actionResult = await client.utils.antiraid.processSanction(
+                member,
+                "antiChannel",
+                t(lang, "events.channelDelete.sanction_reason"),
+                client,
               );
+              logger.event(
+                `[ANTI-CHANNEL] ${executor.tag} sanctionné — suppression de salon : ${actionResult}`,
+              );
+
+              // Recréer le salon supprimé
+              // Pour CHANNEL_DELETE, les overwrites sont dans .old (état avant suppression)
+              const permissionOverwrites =
+                log?.changes?.find((c) => c.key === "permission_overwrites")
+                  ?.old || [];
+              await channel.guild.channels
+                .create({
+                  name: channel.name,
+                  type: channel.type,
+                  position: channel.position,
+                  parent: channel.parentId,
+                  permissionOverwrites: permissionOverwrites.map((o) => ({
+                    id: o.id,
+                    allow: o.allow,
+                    deny: o.deny,
+                    type: o.type,
+                  })),
+                  topic: channel.topic,
+                  rtcRegion: channel.rtcRegion,
+                  userLimit: channel.userLimit,
+                })
+                .catch((e) =>
+                  logger.warn(
+                    `[ANTI-CHANNEL] Impossible de recréer le salon: ${e.message}`,
+                  ),
+                );
+            }
           }
         }
       }

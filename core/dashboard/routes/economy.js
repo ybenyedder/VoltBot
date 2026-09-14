@@ -16,16 +16,19 @@ module.exports = function (client, middlewares, helpers) {
     requireGuildAdmin,
     async (req, res) => {
       try {
-        const users = client.db.db
-          .prepare(
-            "SELECT userId, coins, bank FROM users WHERE guildId = ? AND (coins > 0 OR bank > 0) ORDER BY (coins + bank) DESC",
-          )
-          .all(req.params.guildId);
+        // Contrôle du guild AVANT la requête SQL : inutile d'interroger la DB
+        // pour un serveur sur lequel le bot n'est pas présent.
         const guild = client.guilds.cache.get(req.params.guildId);
         if (!guild)
           return res
             .status(404)
             .json({ error: t(req.lang, "dashboard.economy.guild_not_found") });
+
+        const users = client.db.db
+          .prepare(
+            "SELECT userId, coins, bank FROM users WHERE guildId = ? AND (coins > 0 OR bank > 0) ORDER BY (coins + bank) DESC",
+          )
+          .all(req.params.guildId);
 
         const economyData = [];
         for (const u of users) {
@@ -105,11 +108,18 @@ module.exports = function (client, middlewares, helpers) {
         "dropChannels",
       ];
       const cleanUpdates = {};
+      let hasInvalidNumber = false;
 
       allowed.forEach((key) => {
         if (updates[key] !== undefined) {
           if (["minWork", "maxWork", "minDaily", "maxDaily"].includes(key)) {
-            cleanUpdates[key] = parseInt(updates[key], 10);
+            const parsed = parseInt(updates[key], 10);
+            // NaN ou négatif → 400 explicite plutôt qu'un 500 côté DB.
+            if (isNaN(parsed) || parsed < 0) {
+              hasInvalidNumber = true;
+              return;
+            }
+            cleanUpdates[key] = parsed;
           } else if (key === "dropChannels") {
             cleanUpdates[key] = JSON.stringify(updates[key]);
           } else {
@@ -117,6 +127,10 @@ module.exports = function (client, middlewares, helpers) {
           }
         }
       });
+
+      if (hasInvalidNumber) {
+        return res.status(400).json({ error: "Valeur numérique invalide" });
+      }
 
       try {
         client.db.updateGuild(req.params.guildId, cleanUpdates);

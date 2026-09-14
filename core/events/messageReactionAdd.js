@@ -67,7 +67,8 @@ module.exports = {
       logger.error(`[REACTION_ROLE] Erreur ajout: ${err.message}`, err);
     }
 
-    if (reaction.emoji.name !== "") return;
+    // Tolérer les deux variantes unicode de l'étoile (⭐ et ⭐️)
+    if (reaction.emoji.name !== "⭐" && reaction.emoji.name !== "⭐️") return;
 
     const guildSettings = client.db.getGuild(reaction.message.guild.id);
     if (!guildSettings || !guildSettings.starboardChannel) return;
@@ -98,7 +99,7 @@ module.exports = {
         // Just update star count
         const oldEmbed = alreadyPosted.embeds[0];
         const newEmbed = EmbedBuilder.from(oldEmbed).setTitle(
-          ` ${reaction.count}`,
+          `⭐ ${reaction.count}`,
         );
         await alreadyPosted.edit({ embeds: [newEmbed] }).catch(() => {});
         return;
@@ -111,7 +112,7 @@ module.exports = {
         name: reaction.message.author.tag,
         iconURL: reaction.message.author.displayAvatarURL(),
       })
-      .setTitle(` ${reaction.count}`)
+      .setTitle(`⭐ ${reaction.count}`)
       .setDescription(
         reaction.message.content || t(lang, "events.messageReactionAdd.no_text"),
       )

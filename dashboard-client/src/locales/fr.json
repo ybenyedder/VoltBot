@@ -44,7 +44,18 @@
     "phrase_placeholder": "Entrez vos mots secrets...",
     "system_id": "Identification Système",
     "status_waiting": "Statut : En attente d'interaction",
-    "e2e": "Chiffrement E2E Actif"
+    "e2e": "Chiffrement E2E Actif",
+    "bot_id": "Identifiant",
+    "phrase": "Phrase",
+    "tagline": "Configure ton serveur Discord en quelques clics.",
+    "features": {
+      "realtime_title": "Temps réel",
+      "realtime_desc": "Changements appliqués sans redémarrage.",
+      "antiraid_title": "Anti-raid",
+      "antiraid_desc": "Filtres et seuils granulaires.",
+      "metrics_title": "Métriques",
+      "metrics_desc": "Activité et commandes en un graphe."
+    }
   },
   "dashboard": {
     "welcome": "Bienvenue sur le tableau de bord",
@@ -60,6 +71,13 @@
     "bot_online": "Bot En Ligne",
     "doc": "Doc",
     "support": "Support",
+    "servers": "Serveurs",
+    "members": "membres",
+    "configure": "Configurer",
+    "configure_aria": "Configurer {{name}}",
+    "invite": "Inviter",
+    "invite_aria": "Inviter sur {{name}}",
+    "load_error": "Chargement impossible.",
     "settings_modal": {
       "title": "Configurations du Bot",
       "presence": "Présence en temps réel",
@@ -72,6 +90,7 @@
       "speed_phrases": "Speed Phrases (Global Owners)",
       "no_speed_phrases": "Aucune phrase secondaire enregistrée.",
       "new_phrase": "Nouvelle Phrase",
+      "phrase_label": "Étiquette",
       "blaze": "Blaze (Nom)",
       "online": "En Ligne",
       "idle": "Inactif",
@@ -92,7 +111,11 @@
     "no_cmd_found": "Aucune commande trouvée pour",
     "aliases": "Alias",
     "usage": "Utilisation",
-    "required": "Requis"
+    "required": "Requis",
+    "copy": "Copier",
+    "copied": "Copié",
+    "copy_aria": "Copier {{label}}",
+    "code_default": "le code"
   },
   "sidebar": {
     "dashboard": "Tableau de Bord",
@@ -447,6 +470,7 @@
       "btn_draw": "Bouton Tirage",
       "btn_shop": "Bouton Shop",
       "btn_inv": "Bouton Inventaire",
+      "btn_inv_placeholder": "Inventaire",
       "btn_success": "Bouton Succès",
       "result_msgs": "Messages de Tirage",
       "nothing": "Rien gagné",
@@ -550,6 +574,20 @@
     "wl_added": "Utilisateur ajouté à la whitelist",
     "wl_removed": "Utilisateur retiré",
     "wl_updated": "Whitelist mise à jour",
-    "casino_saved": "Configuration casino sauvegardée"
+    "casino_saved": "Configuration casino sauvegardée",
+    "add_error": "Ajout impossible.",
+    "delete_error": "Suppression impossible."
+  },
+  "errorBoundary": {
+    "title": "Oups, quelque chose s'est mal passé",
+    "desc": "L'interface a rencontré une erreur et n'a pas pu s'afficher correctement. Vous pouvez recharger la page ou copier le détail technique pour le signaler.",
+    "message": "Message",
+    "component_stack": "Afficher la pile des composants",
+    "reload": "Recharger la page",
+    "copy": "Copier le détail",
+    "copied": "Détail copié",
+    "unexpected_error": "Une erreur inattendue est survenue.",
+    "unknown_error": "Erreur inconnue",
+    "unavailable": "(non disponible)"
   }
 }

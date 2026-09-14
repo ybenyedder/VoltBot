@@ -18,7 +18,8 @@ Le cœur (`core/commands`) regroupe un large éventail de modules :
 | Serveur | `roles`, `tickets`, `suggestions`, `voice`, `stats` |
 | Outils | `utility`, `fun`, `custom`, `config`, `backup` |
 
-- **Dashboard web** (React/Vite) avec login OAuth2 Discord
+- **312 commandes à préfixe** (`+help`) — liste complète dans [HELP.md](HELP.md)
+- **Dashboard web** (React/Vite) avec authentification par phrase secrète
 - **Multi-langues** (serveur : `+setlang fr` / `+setlang en` ; dashboard : sélecteur dans l'UI)
 - **Base SQLite par instance** (`better-sqlite3`)
 - Génération d'images (`@napi-rs/canvas`), transcripts de tickets, anti-raid, etc.
@@ -81,18 +82,21 @@ Le front-end (`dashboard-client/.env`) utilise `VITE_DISCORD_CLIENT_ID` et `VITE
 ## 🛠️ Scripts npm
 
 | Script | Action |
-|--------|--------|
+|--------|-------|
 | `npm start` | Démarre l'orchestrateur multi-bots |
 | `npm run dev` | Démarrage en mode développement |
 | `npm test` | Lance les tests (Vitest) |
 | `npm run lint` | Vérification syntaxique des fichiers JS |
+| `npm run format` | Formate avec Prettier (si installé) |
 | `npm run build:dashboard` | Build du dashboard |
 | `npm run verify` | `lint` + `build:dashboard` |
 | `npm run clean` | Nettoie les builds et vieux snapshots |
 
 ## 🔒 Sécurité
 
-Les fichiers sensibles ne sont **jamais** versionnés (voir [`.gitignore`](.gitignore)) : `.env`, bases `*.db`, locks et logs. Ne committe jamais de token réel — utilise toujours les fichiers `.env.example` comme modèle.
+Les fichiers sensibles ne sont **jamais** versionnés (voir [`.gitignore`](.gitignore)) : `.env`, bases `*.db`, locks, logs, backups manuels (`backups_*/`) et scripts d'admin locaux (`migrate_*.js`, `clone_server.js`, `get_guild.js`). Ne committe jamais de token réel — utilise toujours les fichiers `.env.example` comme modèle.
+
+> 📋 Audit technique complet (bugs, sécurité, recommandations) : voir [`RAPPORT_AUDIT.md`](RAPPORT_AUDIT.md).
 
 ## 📦 Stack
 

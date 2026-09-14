@@ -6,7 +6,7 @@ const {
 
 module.exports = {
   name: "configmenu",
-  aliases: ["config", "cfg"],
+  aliases: ["cfg"],
   description:
     "Menu de configuration complète du bot — affiche et gère tous les paramètres du serveur.",
   category: "config",

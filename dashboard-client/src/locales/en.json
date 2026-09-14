@@ -44,7 +44,18 @@
     "phrase_placeholder": "Enter your secret words...",
     "system_id": "System Identification",
     "status_waiting": "Status: Waiting for interaction",
-    "e2e": "E2E Encryption Active"
+    "e2e": "E2E Encryption Active",
+    "bot_id": "Bot ID",
+    "phrase": "Phrase",
+    "tagline": "Set up your Discord server in a few clicks.",
+    "features": {
+      "realtime_title": "Real-time",
+      "realtime_desc": "Changes applied without restart.",
+      "antiraid_title": "Anti-raid",
+      "antiraid_desc": "Granular filters and thresholds.",
+      "metrics_title": "Metrics",
+      "metrics_desc": "Activity and commands in a single graph."
+    }
   },
   "dashboard": {
     "welcome": "Welcome to the dashboard",
@@ -60,6 +71,13 @@
     "bot_online": "Bot Online",
     "doc": "Doc",
     "support": "Support",
+    "servers": "Servers",
+    "members": "members",
+    "configure": "Configure",
+    "configure_aria": "Configure {{name}}",
+    "invite": "Invite",
+    "invite_aria": "Invite to {{name}}",
+    "load_error": "Unable to load.",
     "settings_modal": {
       "title": "Bot Configurations",
       "presence": "Real-time Presence",
@@ -72,6 +90,7 @@
       "speed_phrases": "Speed Phrases (Global Owners)",
       "no_speed_phrases": "No secondary phrases registered.",
       "new_phrase": "New Phrase",
+      "phrase_label": "Label",
       "blaze": "Blaze (Name)",
       "online": "Online",
       "idle": "Idle",
@@ -92,7 +111,11 @@
     "no_cmd_found": "No commands found for",
     "aliases": "Aliases",
     "usage": "Usage",
-    "required": "Required"
+    "required": "Required",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copy_aria": "Copy {{label}}",
+    "code_default": "the code"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -447,6 +470,7 @@
       "btn_draw": "Draw Button",
       "btn_shop": "Shop Button",
       "btn_inv": "Inventory Button",
+      "btn_inv_placeholder": "Inventory",
       "btn_success": "Success Button",
       "result_msgs": "Draw Messages",
       "nothing": "Nothing won",
@@ -550,6 +574,20 @@
     "wl_added": "User added to whitelist",
     "wl_removed": "User removed",
     "wl_updated": "Whitelist updated",
-    "casino_saved": "Casino configuration saved"
+    "casino_saved": "Casino configuration saved",
+    "add_error": "Unable to add.",
+    "delete_error": "Unable to delete."
+  },
+  "errorBoundary": {
+    "title": "Oops, something went wrong",
+    "desc": "The interface encountered an error and could not be displayed correctly. You can reload the page or copy the technical details to report it.",
+    "message": "Message",
+    "component_stack": "Show component stack",
+    "reload": "Reload the page",
+    "copy": "Copy details",
+    "copied": "Details copied",
+    "unexpected_error": "An unexpected error occurred.",
+    "unknown_error": "Unknown error",
+    "unavailable": "(unavailable)"
   }
 }

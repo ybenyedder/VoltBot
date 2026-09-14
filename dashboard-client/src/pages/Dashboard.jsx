@@ -18,8 +18,235 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
 const ACCENT = "#7c5cff";
-const VERSION = "v1.0";
+const VERSION = "v2.0.0";
 const numberFr = new Intl.NumberFormat("fr-FR");
+
+// --- Helpers module-level (aucune dépendance à l'état du composant) ---
+const formatMembers = (n) =>
+  typeof n === "number" ? numberFr.format(n) : "—";
+
+const inviteUrl = (guildId = "") =>
+  `https://discord.com/api/oauth2/authorize?client_id=${import.meta.env.VITE_DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands${
+    guildId ? `&guild_id=${guildId}&disable_guild_select=true` : ""
+  }`;
+
+// --- Sous-composants module-level ---
+// Définis hors du composant Dashboard pour éviter leur re-création à
+// chaque render (identification React stable) ; toutes les dépendances
+// (état, handlers) sont passées explicitement en props.
+
+function Header({
+  botName,
+  lang,
+  isGlobalOwner,
+  onToggleLang,
+  onOpenSettings,
+  onLogout,
+}) {
+  const { t } = useTranslation();
+  return (
+    <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between mb-10">
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500 mb-2">
+          {t("dashboard.servers")}
+        </p>
+        <h1 className="text-3xl sm:text-[34px] font-semibold tracking-tight text-white leading-none">
+          {botName}
+        </h1>
+      </div>
+
+      <nav className="flex items-center gap-1.5" aria-label="Actions">
+        <button
+          onClick={onToggleLang}
+          className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
+          aria-label="Changer la langue"
+        >
+          <Globe size={13} aria-hidden="true" />
+          {lang.toUpperCase()}
+        </button>
+
+        {isGlobalOwner && (
+          <button
+            onClick={onOpenSettings}
+            className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
+            aria-label={t("sidebar.settings")}
+          >
+            <Settings size={13} aria-hidden="true" />
+            {t("sidebar.settings")}
+          </button>
+        )}
+
+        <button
+          onClick={onLogout}
+          className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
+          aria-label={t("dashboard.logout")}
+        >
+          <LogOut size={13} aria-hidden="true" />
+          {t("dashboard.logout")}
+        </button>
+      </nav>
+    </header>
+  );
+}
+
+// Skeleton (geometry mirrors GuildCard exactly)
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 p-5">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-white/[0.04] animate-pulse" />
+        <div className="flex-1 min-w-0 pt-1 space-y-2.5">
+          <div className="h-4 w-2/3 rounded bg-white/[0.05] animate-pulse" />
+          <div className="h-3 w-1/3 rounded bg-white/[0.04] animate-pulse" />
+        </div>
+      </div>
+      <div className="mt-5 h-9 rounded-lg bg-white/[0.03] animate-pulse" />
+    </div>
+  );
+}
+
+// Empty state
+function EmptyState({ botName }) {
+  return (
+    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 px-6 py-14 text-center">
+      <h3 className="text-base font-semibold text-white">
+        Aucun serveur configuré.
+      </h3>
+      <p className="text-sm text-zinc-500 mt-1.5">
+        Invitez {botName} pour commencer.
+      </p>
+      <a
+        href={inviteUrl()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-6 inline-flex items-center gap-2 px-4 h-10 rounded-lg text-sm font-medium text-white transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
+        style={{ backgroundColor: ACCENT }}
+        aria-label="Inviter sur un serveur"
+      >
+        <Plus size={15} aria-hidden="true" />
+        Inviter sur un serveur
+      </a>
+    </div>
+  );
+}
+
+// Error state
+function ErrorState({ onRetry }) {
+  const { t } = useTranslation();
+  return (
+    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 px-6 py-14 text-center">
+      <h3 className="text-base font-semibold text-white">
+        Impossible de charger les serveurs.
+      </h3>
+      <button
+        onClick={onRetry}
+        className="mt-5 inline-flex items-center gap-2 px-4 h-10 rounded-lg text-sm font-medium text-white transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
+        style={{ backgroundColor: ACCENT }}
+        aria-label={t("common.retry")}
+      >
+        <RefreshCw size={15} aria-hidden="true" />
+        {t("common.retry")}
+      </button>
+    </div>
+  );
+}
+
+// Guild card
+function GuildCard({ guild }) {
+  const { t } = useTranslation();
+  const installed = !!guild.botInstalled;
+  const members = formatMembers(
+    guild.memberCount ?? guild.approximate_member_count,
+  );
+
+  const ringActive = installed
+    ? "ring-1 ring-[#7c5cff]/40 hover:ring-[#7c5cff]/60"
+    : "ring-1 ring-white/5 hover:ring-white/10";
+
+  return (
+    <div
+      className={`group rounded-2xl bg-neutral-900 ${ringActive} p-5 flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.6)]`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="relative shrink-0">
+          {guild.icon ? (
+            <img
+              src={guild.icon}
+              alt=""
+              className={`w-12 h-12 rounded-xl object-cover ${
+                installed
+                  ? "ring-1 ring-[#7c5cff]/50"
+                  : "ring-1 ring-white/10"
+              }`}
+            />
+          ) : (
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-semibold text-zinc-300 bg-white/[0.04] ${
+                installed
+                  ? "ring-1 ring-[#7c5cff]/50"
+                  : "ring-1 ring-white/10"
+              }`}
+              aria-hidden="true"
+            >
+              {guild.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 pt-0.5">
+          <h3
+            className="text-[15px] font-semibold text-white truncate leading-tight"
+            title={guild.name}
+          >
+            {guild.name}
+          </h3>
+          <div className="mt-1 text-xs text-zinc-500 flex items-center gap-1.5">
+            <span className="tabular-nums text-zinc-400">{members}</span>
+            <span>{t("dashboard.members")}</span>
+            {guild.owner && (
+              <>
+                <span
+                  className="w-0.5 h-0.5 rounded-full bg-zinc-700"
+                  aria-hidden="true"
+                />
+                <span>{t("dashboard.owner")}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        {installed ? (
+          <Link
+            to={`/dashboard/${guild.id}`}
+            className="w-full h-9 inline-flex items-center justify-between px-3.5 rounded-lg text-[13px] font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900"
+            style={{ backgroundColor: ACCENT }}
+            aria-label={t("dashboard.configure_aria", { name: guild.name })}
+          >
+            <span>{t("dashboard.configure")}</span>
+            <ChevronRight
+              size={15}
+              aria-hidden="true"
+              className="transition-transform group-hover:translate-x-0.5"
+            />
+          </Link>
+        ) : (
+          <a
+            href={inviteUrl(guild.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-lg text-[13px] font-medium text-zinc-300 bg-white/[0.03] ring-1 ring-white/5 hover:bg-white/[0.06] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]"
+            aria-label={t("dashboard.invite_aria", { name: guild.name })}
+          >
+            <Plus size={14} aria-hidden="true" />
+            {t("dashboard.invite")}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
@@ -120,7 +347,8 @@ const Dashboard = () => {
         // Surface reqId from body (5xx) or X-Request-Id header so the user
         // can quote it when filing a bug.
         const reqId = errorData.reqId || res.reqId;
-        const base = errorData.details || errorData.error || "Chargement impossible.";
+        const base =
+          errorData.details || errorData.error || t("dashboard.load_error");
         throw new Error(reqId ? `${base} [ID: ${reqId}]` : base);
       }
       const data = await res.json();
@@ -181,7 +409,7 @@ const Dashboard = () => {
       setNewPhrase("");
       setNewPhraseName("");
     } catch (err) {
-      setSettingsMessage({ type: "error", text: "Ajout impossible." });
+      setSettingsMessage({ type: "error", text: t("notifications.add_error") });
     }
   };
 
@@ -192,11 +420,17 @@ const Dashboard = () => {
       });
       setSpeedPhrases(speedPhrases.filter((p) => p.phrase !== phrase));
     } catch (err) {
-      setSettingsMessage({ type: "error", text: "Suppression impossible." });
+      setSettingsMessage({
+        type: "error",
+        text: t("notifications.delete_error"),
+      });
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Invalide le cookie JWT côté backend (route best-effort : ne bloque pas
+    // la déconnexion si l'endpoint n'est pas encore disponible).
+    await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     window.location.replace("/");
   };
 
@@ -209,214 +443,11 @@ const Dashboard = () => {
   );
 
   const showSearch = guilds.length > 6;
-  const formatMembers = (n) =>
-    typeof n === "number" ? numberFr.format(n) : "—";
-
-  const inviteUrl = (guildId = "") =>
-    `https://discord.com/api/oauth2/authorize?client_id=${import.meta.env.VITE_DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands${
-      guildId ? `&guild_id=${guildId}&disable_guild_select=true` : ""
-    }`;
 
   const toggleLang = () => {
     const newLang = i18n.language === "fr" ? "en" : "fr";
     i18n.changeLanguage(newLang);
     localStorage.setItem("dashboard_lang", newLang);
-  };
-
-  // Header
-  const Header = () => (
-    <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between mb-10">
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500 mb-2">
-          Serveurs
-        </p>
-        <h1 className="text-3xl sm:text-[34px] font-semibold tracking-tight text-white leading-none">
-          {botName}
-        </h1>
-      </div>
-
-      <nav className="flex items-center gap-1.5" aria-label="Actions">
-        <button
-          onClick={toggleLang}
-          className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
-          aria-label="Changer la langue"
-        >
-          <Globe size={13} aria-hidden="true" />
-          {i18n.language.toUpperCase()}
-        </button>
-
-        {isGlobalOwner && (
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
-            aria-label={t("sidebar.settings")}
-          >
-            <Settings size={13} aria-hidden="true" />
-            {t("sidebar.settings")}
-          </button>
-        )}
-
-        <button
-          onClick={handleLogout}
-          className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.04] inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
-          aria-label={t("dashboard.logout")}
-        >
-          <LogOut size={13} aria-hidden="true" />
-          {t("dashboard.logout")}
-        </button>
-      </nav>
-    </header>
-  );
-
-  // Skeleton (geometry mirrors GuildCard exactly)
-  const SkeletonCard = () => (
-    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 p-5">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-white/[0.04] animate-pulse" />
-        <div className="flex-1 min-w-0 pt-1 space-y-2.5">
-          <div className="h-4 w-2/3 rounded bg-white/[0.05] animate-pulse" />
-          <div className="h-3 w-1/3 rounded bg-white/[0.04] animate-pulse" />
-        </div>
-      </div>
-      <div className="mt-5 h-9 rounded-lg bg-white/[0.03] animate-pulse" />
-    </div>
-  );
-
-  // Empty state
-  const EmptyState = () => (
-    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 px-6 py-14 text-center">
-      <h3 className="text-base font-semibold text-white">
-        Aucun serveur configuré.
-      </h3>
-      <p className="text-sm text-zinc-500 mt-1.5">
-        Invitez {botName} pour commencer.
-      </p>
-      <a
-        href={inviteUrl()}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-6 inline-flex items-center gap-2 px-4 h-10 rounded-lg text-sm font-medium text-white transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
-        style={{ backgroundColor: ACCENT }}
-        aria-label="Inviter sur un serveur"
-      >
-        <Plus size={15} aria-hidden="true" />
-        Inviter sur un serveur
-      </a>
-    </div>
-  );
-
-  // Error state
-  const ErrorState = () => (
-    <div className="rounded-2xl bg-neutral-900 ring-1 ring-white/5 px-6 py-14 text-center">
-      <h3 className="text-base font-semibold text-white">
-        Impossible de charger les serveurs.
-      </h3>
-      <button
-        onClick={fetchData}
-        className="mt-5 inline-flex items-center gap-2 px-4 h-10 rounded-lg text-sm font-medium text-white transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
-        style={{ backgroundColor: ACCENT }}
-        aria-label={t("common.retry")}
-      >
-        <RefreshCw size={15} aria-hidden="true" />
-        {t("common.retry")}
-      </button>
-    </div>
-  );
-
-  // Guild card
-  const GuildCard = ({ guild }) => {
-    const installed = !!guild.botInstalled;
-    const members = formatMembers(
-      guild.memberCount ?? guild.approximate_member_count,
-    );
-
-    const ringActive = installed
-      ? "ring-1 ring-[#7c5cff]/40 hover:ring-[#7c5cff]/60"
-      : "ring-1 ring-white/5 hover:ring-white/10";
-
-    return (
-      <div
-        className={`group rounded-2xl bg-neutral-900 ${ringActive} p-5 flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.6)]`}
-      >
-        <div className="flex items-start gap-4">
-          <div className="relative shrink-0">
-            {guild.icon ? (
-              <img
-                src={guild.icon}
-                alt=""
-                className={`w-12 h-12 rounded-xl object-cover ${
-                  installed
-                    ? "ring-1 ring-[#7c5cff]/50"
-                    : "ring-1 ring-white/10"
-                }`}
-              />
-            ) : (
-              <div
-                className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-semibold text-zinc-300 bg-white/[0.04] ${
-                  installed
-                    ? "ring-1 ring-[#7c5cff]/50"
-                    : "ring-1 ring-white/10"
-                }`}
-                aria-hidden="true"
-              >
-                {guild.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 min-w-0 pt-0.5">
-            <h3
-              className="text-[15px] font-semibold text-white truncate leading-tight"
-              title={guild.name}
-            >
-              {guild.name}
-            </h3>
-            <div className="mt-1 text-xs text-zinc-500 flex items-center gap-1.5">
-              <span className="tabular-nums text-zinc-400">{members}</span>
-              <span>membres</span>
-              {guild.owner && (
-                <>
-                  <span
-                    className="w-0.5 h-0.5 rounded-full bg-zinc-700"
-                    aria-hidden="true"
-                  />
-                  <span>Propriétaire</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          {installed ? (
-            <Link
-              to={`/dashboard/${guild.id}`}
-              className="w-full h-9 inline-flex items-center justify-between px-3.5 rounded-lg text-[13px] font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff] focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900"
-              style={{ backgroundColor: ACCENT }}
-              aria-label={`Configurer ${guild.name}`}
-            >
-              <span>Configurer</span>
-              <ChevronRight
-                size={15}
-                aria-hidden="true"
-                className="transition-transform group-hover:translate-x-0.5"
-              />
-            </Link>
-          ) : (
-            <a
-              href={inviteUrl(guild.id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-lg text-[13px] font-medium text-zinc-300 bg-white/[0.03] ring-1 ring-white/5 hover:bg-white/[0.06] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]"
-              aria-label={`Inviter sur ${guild.name}`}
-            >
-              <Plus size={14} aria-hidden="true" />
-              Inviter
-            </a>
-          )}
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -428,7 +459,14 @@ const Dashboard = () => {
         id="dashboard-main"
         className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14 flex-1 w-full"
       >
-        <Header />
+        <Header
+          botName={botName}
+          lang={i18n.language}
+          isGlobalOwner={isGlobalOwner}
+          onToggleLang={toggleLang}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onLogout={handleLogout}
+        />
 
         {showSearch && !loading && !error && (
           <div className="relative mb-6 max-w-sm">
@@ -461,9 +499,9 @@ const Dashboard = () => {
             <span className="sr-only">Chargement des serveurs.</span>
           </div>
         ) : error ? (
-          <ErrorState />
+          <ErrorState onRetry={fetchData} />
         ) : guilds.length === 0 ? (
-          <EmptyState />
+          <EmptyState botName={botName} />
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -731,7 +769,7 @@ const Dashboard = () => {
                         htmlFor="new-phrase-name"
                         className="text-[11px] text-zinc-500 font-medium"
                       >
-                        Étiquette
+                        {t("dashboard.settings_modal.phrase_label")}
                       </label>
                       <input
                         id="new-phrase-name"

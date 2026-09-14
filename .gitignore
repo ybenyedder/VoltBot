@@ -35,3 +35,17 @@ dist-ssr/
 .vscode/
 .idea/
 *.swp
+
+# Backups manuels (peuvent contenir des copies de .env avec secrets)
+backups_*/
+
+# Scripts d'admin/migration locaux (contiennent des tokens — à dé-tokeniser avant tout commit)
+migrate_*.js
+clone_server.js
+get_guild.js
+voltbot_setup.js
+
+# Divers
+recovery_list/
+photorec.se2
+strings_to_translate.txt

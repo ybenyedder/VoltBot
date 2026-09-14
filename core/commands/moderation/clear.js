@@ -5,7 +5,7 @@ const fmtNum = (n) => new Intl.NumberFormat("fr-FR").format(n);
 
 module.exports = {
   name: "clear",
-  aliases: ["purge", "nuke", "effacer", "c", "clean"],
+  aliases: ["nuke", "effacer", "c"],
   description:
     "Supprime un certain nombre de messages, éventuellement d'un membre spécifique.",
   category: "moderation",

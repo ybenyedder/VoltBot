@@ -1,8 +1,9 @@
 # Installation du bot
 
-> Ce zip contient déjà tes fichiers `.env` (tokens Discord) et les bases de données.
-> **Garde-le privé** — ne le partage avec personne.
-> `node_modules` n'est PAS inclus (trop lourd) → tu le réinstalles avec `npm install`.
+> ⚠️ Si tu as cloné ce repo depuis GitHub : les fichiers `.env` **ne sont pas inclus** (secrets).
+> Crée `bots/instances/<nom>/.env` à partir de `.env.example` pour chaque instance (voir ci-dessous).
+> Si tu as reçu le projet sous forme de zip privé contenant tes `.env` : **garde-le pour toi**.
+> `node_modules` n'est jamais inclus → réinstalle-le avec `npm install`.
 
 Prérequis : **Node.js 18+**.
 
@@ -53,9 +54,15 @@ npm run build:dashboard     # build l'interface web (dashboard-client)
 npm start                   # démarre l'orchestrateur (lit bots/instances/*/.env)
 ```
 
-- Le bot lit chaque instance dans `bots/instances/<nom>/.env` (token déjà rempli).
-- Le dashboard tourne sur le `PORT` défini dans le `.env`.
+- Le bot lit chaque instance dans `bots/instances/<nom>/.env` :
+  ```bash
+  mkdir -p bots/instances/mon-bot
+  cp .env.example bots/instances/mon-bot/.env
+  # puis remplis DISCORD_TOKEN, OWNER_ID, JWT_SECRET, PORT (3001+), etc.
+  ```
+- Le **gateway** du dashboard écoute sur le port **3000** ; chaque instance prend un `PORT` **3001+** (3000 est réservé).
 - Langue serveur : `+setlang en` / `+setlang fr`. Langue dashboard : sélecteur dans l'UI.
+- Commandes : voir [HELP.md](HELP.md). Audit technique : [RAPPORT_AUDIT.md](RAPPORT_AUDIT.md).
 
 ## Dépannage
 - `better-sqlite3` erreur de build → `pkg install python make clang` (Termux) ou `apt install build-essential python3` (Linux), puis `npm rebuild better-sqlite3`.

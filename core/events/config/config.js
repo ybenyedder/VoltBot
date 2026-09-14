@@ -14,16 +14,16 @@ module.exports = {
 
   // Emojis (You can replace these with custom Discord bot emojis for an even more premium look)
   emojis: {
-    success: "", // More elegant than standard checkmark
-    error: "", // More elegant than standard X
-    loading: "",
-    coin: "",
-    level: "",
-    mod: "",
-    fun: "",
-    util: "",
-    dev: "",
-    premium: "",
+    success: "✅",
+    error: "❌",
+    loading: "⏳",
+    coin: "🪙",
+    level: "⭐",
+    mod: "🛡️",
+    fun: "🎮",
+    util: "🧰",
+    dev: "🛠️",
+    premium: "💎",
     arrow: "»",
     dot: "•",
   },

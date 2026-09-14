@@ -372,10 +372,18 @@ if (fs.existsSync(eventsPath)) {
   for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
     const event = require(filePath);
+    // Wrapper global : une erreur dans un handler d'event ne doit jamais
+    // remonter en unhandledRejection — elle est loggée avec son origine.
+    const safeExecute = (...args) =>
+      Promise.resolve(event.execute(...args, client)).catch((error) => {
+        Logger.error(
+          `Erreur non gérée dans l'event ${event.name} (${file}) : ${error?.stack || error}`,
+        );
+      });
     if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
+      client.once(event.name, safeExecute);
     } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
+      client.on(event.name, safeExecute);
     }
     loadedEvents++;
   }

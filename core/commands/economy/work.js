@@ -23,6 +23,37 @@ module.exports = {
       message.t("commands.work.job_cook"),
     ];
     const randomJob = jobs[Math.floor(Math.random() * jobs.length)];
+
+    // Claim atomique (DB) : le gain n'est crédité que si le timestamp a été
+    // réservé — persiste entre les redémarrages, contrairement au cooldown
+    // en mémoire du middleware.
+    const cooldown = 3600000; // aligné sur cooldown: 3600 (secondes)
+    client.db.getUser(message.author.id, message.guild.id); // crée la ligne si absente
+    if (
+      !client.db.tryClaimWork(message.author.id, message.guild.id, cooldown)
+    ) {
+      const fresh = client.db.getUser(message.author.id, message.guild.id);
+      const lastWork = fresh.workTimestamp || 0;
+      const readyAt = Math.floor((lastWork + cooldown) / 1000);
+      const embed = client.embedBuilder
+        .warning(
+          client,
+          message.t("core.dispatch.cooldown", {
+            time: Math.max(
+              0,
+              Math.ceil((lastWork + cooldown - Date.now()) / 1000),
+            ).toString(),
+            cmd: "work",
+          }),
+        )
+        .addFields({
+          name: message.t("commands.daily.field_returns"),
+          value: `<t:${readyAt}:R>`,
+          inline: true,
+        });
+      return message.reply({ embeds: [embed] }).catch(() => {});
+    }
+
     const earnings = Math.floor(Math.random() * (max - min + 1)) + min;
 
     client.db.addCoins(message.author.id, message.guild.id, earnings);

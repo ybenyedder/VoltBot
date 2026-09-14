@@ -3,7 +3,7 @@ const config = require("../config/config");
 const Logger = require("./logger");
 const { t } = require("./i18n");
 
-const botName = (client) => client?.user?.username || "ZeroDay";
+const botName = (client) => client?.user?.username || "VoltBot";
 const footerText = (client) => botName(client);
 const footerIcon = (client) => client?.user?.displayAvatarURL?.({ size: 32 });
 const botAvatar = (client, size) =>

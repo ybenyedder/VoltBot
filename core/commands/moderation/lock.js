@@ -2,7 +2,7 @@ const { PermissionsBitField } = require("discord.js");
 
 module.exports = {
   name: "lock",
-  aliases: ["verrouiller", "close", "fermer"],
+  aliases: ["verrouiller"],
   description: "Verrouille le salon actuel (empêche l'envoi de messages).",
   category: "moderation",
   usage: "+lock [#salon|all]",

@@ -14,6 +14,7 @@ const {
   MessageFlags,
 } = require("discord.js");
 const Logger = require("../utils/logger");
+const crypto = require("crypto");
 const {
   handleGiveawayInteractions,
   handleEmbedBuilderInteractions,
@@ -37,8 +38,9 @@ const handleTempVCInteractions = require("../utils/tempvcInteractions");
 const { findBadword } = require("../utils/badwords");
 const { t } = require("../utils/i18n");
 
-// Helper pour générer un ID unique
-const generateId = () => Math.random().toString(36).substring(2, 12);
+// Helper pour générer un ID unique — crypto.randomUUID (non prévisible,
+// contrairement à Math.random), tronqué à 12 caractères.
+const generateId = () => crypto.randomUUID().substring(0, 12);
 
 // Helper pour mettre à jour l'embed de composition de lettres
 const updateComposeEmbed = (state, userName, client, lang = "fr") => {
@@ -129,6 +131,7 @@ const handleLetterInteractions = async (interaction, client) => {
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId("lettres_send")
+        .setLabel(interaction.t("interactions.lettres.btn_send"))
         .setStyle(ButtonStyle.Success),
     );
 
@@ -306,6 +309,7 @@ const handleLetterInteractions = async (interaction, client) => {
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`lettres_delete_${letterId}`)
+        .setLabel(interaction.t("interactions.lettres.btn_delete"))
         .setStyle(ButtonStyle.Danger),
     );
 
@@ -370,6 +374,7 @@ const handleLetterInteractions = async (interaction, client) => {
     const newRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`lettres_delete_${letterId}`)
+        .setLabel(interaction.t("interactions.lettres.btn_delete"))
         .setStyle(ButtonStyle.Danger),
     );
 
@@ -643,6 +648,31 @@ module.exports = {
 
         // TempVC
         await handleTempVCInteractions(interaction, client);
+
+        // Garde-fou : slash command / autocomplete non traitée par aucun
+        // handler (le bot fonctionne en commandes à préfixe) — on ack
+        // proprement en éphémère plutôt que de laisser l'interaction muette.
+        // NB : aucune clé i18n "unknown_command" ne correspond ici (celles du
+        // dispatcher à préfixe attendent une interpolation {{cmd}}).
+        if (
+          (interaction.isChatInputCommand?.() ||
+            interaction.isAutocomplete?.()) &&
+          !interaction.replied &&
+          !interaction.deferred
+        ) {
+          if (interaction.isAutocomplete?.()) {
+            // Un autocomplete ne supporte pas reply() : on répond une liste vide.
+            await interaction.respond([]).catch(() => {});
+          } else {
+            await interaction
+              .reply({
+                content:
+                  "❌ Cette commande n'est pas disponible. Le bot utilise des commandes à préfixe (`+help`).",
+                flags: [MessageFlags.Ephemeral],
+              })
+              .catch(() => {});
+          }
+        }
       },
     );
   },

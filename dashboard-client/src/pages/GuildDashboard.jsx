@@ -83,6 +83,18 @@ const Skeleton = ({ className = "" }) => (
   <div className={`animate-pulse rounded-lg bg-neutral-900/60 ${className}`} />
 );
 
+// Formatage d'uptime (ms) en "Xj Yh" / "Xh Ym" / "Xm" — valeur réelle, jamais factice.
+const formatUptime = (ms) => {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
+  const totalMinutes = Math.floor(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}j ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+};
+
 // Module labels and section subtitles — sourced from i18n; see translateModuleLabel + subtitleFor
 const MODULE_KEYS = [
   "antiraid",
@@ -145,6 +157,8 @@ const GuildDashboard = () => {
   const [channels, setChannels] = useState([]);
   const [roles, setRoles] = useState([]);
   const [stats, setStats] = useState(null);
+  // Uptime réel du bot en ms (exposé par /status -> stats.uptime), null si indisponible.
+  const [botUptimeMs, setBotUptimeMs] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
@@ -189,6 +203,18 @@ const GuildDashboard = () => {
   const [isGlobalOwner, setIsGlobalOwner] = useState(false);
   const [botOwners, setBotOwners] = useState([]);
   const [newOwnerId, setNewOwnerId] = useState("");
+
+  // Refs miroirs de t et isGlobalOwner — lus dans fetchData sans figurer dans
+  // ses dépendances : un changement de langue ou de statut owner ne doit pas
+  // rejouer l'intégralité des requêtes (~18 appels).
+  const tRef = useRef(t);
+  const isGlobalOwnerRef = useRef(isGlobalOwner);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+  useEffect(() => {
+    isGlobalOwnerRef.current = isGlobalOwner;
+  }, [isGlobalOwner]);
 
   const [logSetup, setLogSetup] = useState({
     categoryName: "",
@@ -308,7 +334,7 @@ const GuildDashboard = () => {
       ]);
 
       if (!mR.ok || !sR.ok || !cR.ok || !stR.ok || !rR.ok || !tR.ok || !pR.ok)
-        throw new Error(t("notifications.sync_failed"));
+        throw new Error(tRef.current("notifications.sync_failed"));
 
       const [mD, sD, cD, stD, rD, tD, pD, ecoD, lvlD, authR] =
         await Promise.all([
@@ -328,11 +354,13 @@ const GuildDashboard = () => {
           apiFetch("/auth/me").catch(() => ({ ok: false })),
         ]);
 
+      // Statut owner frais pour CE passage de fetchData (l'état React et la ref
+      // ne sont mis à jour qu'après — on évite ainsi un refetch complet).
+      let ownerNow = isGlobalOwnerRef.current;
       if (authR.ok) {
         const authD = await authR.json();
-        setIsGlobalOwner(
-          authD.isGlobalOwner || authD.roles?.includes("GLOBAL_OWNER"),
-        );
+        ownerNow = authD.isGlobalOwner || authD.roles?.includes("GLOBAL_OWNER");
+        setIsGlobalOwner(ownerNow);
       }
 
       // Fetch Economy Settings
@@ -364,6 +392,7 @@ const GuildDashboard = () => {
         if (ownerRes.ok) {
           const oData = await ownerRes.json();
           setBotOwners(oData);
+          ownerNow = true;
           setIsGlobalOwner(true);
         }
       } catch {
@@ -378,8 +407,22 @@ const GuildDashboard = () => {
       const auditRes = await apiFetch(`/guilds/${guildId}/audit-logs`);
       if (auditRes.ok) setAuditLogs(await auditRes.json());
 
+      // Fetch bot status (uptime réel en ms) — best-effort, non bloquant
+      try {
+        const statusRes = await apiFetch("/status");
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          const up = statusData?.stats?.uptime;
+          if (typeof up === "number" && Number.isFinite(up)) {
+            setBotUptimeMs(up);
+          }
+        }
+      } catch {
+        /* status is best-effort */
+      }
+
       // Fetch Security Logs (Global Owner Only)
-      if (isGlobalOwner) {
+      if (ownerNow) {
         const securityRes = await apiFetch("/bot/security-logs");
         if (securityRes.ok) setSecurityLogs(await securityRes.json());
       }
@@ -402,7 +445,9 @@ const GuildDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [guildId, t, isGlobalOwner]);
+    // Dépendances volontairement minimales : t et isGlobalOwner passent par
+    // des refs (tRef / isGlobalOwnerRef) pour éviter les refetchs en cascade.
+  }, [guildId]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -420,12 +465,14 @@ const GuildDashboard = () => {
 
   useEffect(() => {
     let interval;
-    if (activeTab === "stats") {
+    // /bot/logs est réservé au global owner : ne pas poller sinon
+    // (403 silencieuses toutes les 3 s + risque de rate-limit 429).
+    if (activeTab === "stats" && isGlobalOwner) {
       fetchLogs();
       interval = setInterval(fetchLogs, 3000);
     }
     return () => clearInterval(interval);
-  }, [activeTab, fetchLogs]);
+  }, [activeTab, isGlobalOwner, fetchLogs]);
 
   const toggleModule = useCallback(
     async (name, current) => {
@@ -1325,7 +1372,7 @@ const GuildDashboard = () => {
                     },
                     {
                       label: t("guild.stats.uptime"),
-                      val: "99.9%",
+                      val: formatUptime(botUptimeMs),
                       icon: Activity,
                     },
                     {
@@ -1456,10 +1503,13 @@ const GuildDashboard = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={async () => {
-                          const res = await apiFetch("/bot/logs/full");
-                          if (res.ok) {
+                          try {
+                            const res = await apiFetch("/bot/logs/full");
+                            if (!res.ok) throw new Error();
                             const data = await res.json();
                             setConsoleLogs(data.logs.split("\n"));
+                          } catch {
+                            showError(t("common.error"));
                           }
                         }}
                         className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-emerald-500 transition-colors flex items-center gap-1.5 border border-zinc-800 px-2 py-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60"
@@ -4104,7 +4154,7 @@ const GuildDashboard = () => {
                                   {
                                     k: "labelInv",
                                     l: t("guild.casino.btn_inv"),
-                                    d: "Inventaire",
+                                    d: t("guild.casino.btn_inv_placeholder"),
                                   },
                                   {
                                     k: "labelSuccess",

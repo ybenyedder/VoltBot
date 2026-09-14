@@ -117,7 +117,11 @@ module.exports = {
       }
     }
 
-    const antiraid = client.db.getAntiraidConfig(newMember.guild.id);
+    // Gate par module antiraid (toggle dashboard) — le revert des rôles et la
+    // sanction sont désactivés ensemble. Redondant avec la gate de processSanction.
+    const antiraid = client.db.isModuleEnabled(newMember.guild.id, "antiraid")
+      ? client.db.getAntiraidConfig(newMember.guild.id)
+      : null;
 
     if (!antiraid || antiraid.antiRank === 0) return;
 
@@ -126,114 +130,143 @@ module.exports = {
     if (addedRoles.size === 0) return;
 
     // Récupérer le modérateur via les audits logs
-    const fetchedLogs = await newMember.guild
-      .fetchAuditLogs({
-        limit: 1,
-        type: 25, // MEMBER_ROLE_UPDATE
-      })
-      .catch(() => null);
-    const log = fetchedLogs?.entries.first();
-    if (!log || Date.now() - log.createdTimestamp > 30000) return;
+    // Toute la section anti-rank est protégée : les entrées d'audit peuvent
+    // être partielles (executor/target absents) et ne doivent jamais crasher l'event.
+    try {
+      const fetchedLogs = await newMember.guild
+        .fetchAuditLogs({
+          limit: 1,
+          type: 25, // MEMBER_ROLE_UPDATE
+        })
+        .catch(() => null);
+      const log = fetchedLogs?.entries.first();
+      if (!log || Date.now() - log.createdTimestamp > 30000) return;
 
-    const { executor, target } = log;
-    if (target.id !== newMember.id) return;
-    if (executor.id === client.user.id) return; // Ignorer si c'est le bot
+      const { executor, target } = log;
+      if (!log || !target || !executor || target.id === executor.id) return;
+      if (target.id !== newMember.id) return;
+      if (executor.id === client.user.id) return; // Ignorer si c'est le bot
 
-    // Vérifier si le modérateur est bypassé
-    if (
-      permissions.isWhitelisted(
-        executor.id,
-        newMember.guild.id,
-        client,
-        null,
-        "antiNuke",
+      // Vérifier si le modérateur est bypassé
+      if (
+        permissions.isWhitelisted(
+          executor.id,
+          newMember.guild.id,
+          client,
+          null,
+          "antiRank",
+        )
       )
-    )
-      return;
+        return;
 
-    // Logique Anti-Rank
-    let shouldRevert = false;
-    if (antiraid.antiRankType === "max") {
-      shouldRevert = true;
-    } else {
-      // "danger" : Rôles avec des permissions sensibles
-      const dangerousPerms = [
-        "Administrator",
-        "ManageGuild",
-        "ManageRoles",
-        "ManageChannels",
-        "BanMembers",
-        "KickMembers",
-        "ManageWebhooks",
-        "ManageMessages",
-      ];
-      shouldRevert = addedRoles.some((role) =>
-        role.permissions.toArray().some((p) => dangerousPerms.includes(p)),
-      );
-    }
-
-    if (shouldRevert) {
-      try {
-        await newMember.roles.set(
-          oldMember.roles.cache.map((r) => r.id),
-          "Anti-Rank Protection",
-        );
-
-        // Sanctionner l'exécuteur si configuré
-        const execMember = await newMember.guild.members
-          .fetch(executor.id)
-          .catch(() => null);
-        if (execMember) {
-          const actionResult = await client.utils.antiraid.processSanction(
-            execMember,
-            "antiRank",
-            t(lang, "events.guildMemberUpdate.reason_sensitive_role_unauthorized"),
-            client,
-          );
-          logger.event(
-            `[ANTIRAID] ${executor.tag} sanctionné via antiRank : ${actionResult}`,
-          );
-        }
-
-        const rankLogChannelId =
-          client.db.resolveLogChannel(newMember.guild.id, "modlog", "antirank") ||
-          client.db.resolveLogChannel(newMember.guild.id, "raidlog", "antirank") ||
-          guildSettings.raidLogsChannel;
-        if (rankLogChannelId) {
-          const channel = newMember.guild.channels.cache.get(rankLogChannelId);
-          if (channel) {
-            const blockedRoles = (
-              addedRoles.map((r) => `<@&${r.id}>`).join(" ") ||
-              t(lang, "events.guildMemberUpdate.none")
-            ).substring(0, 1024);
-            const embed = client.embedBuilder
-              .base(client, t(lang, "events.guildMemberUpdate.antirank_title"))
-              .addFields(
-                {
-                  name: t(lang, "events.guildMemberUpdate.field_target"),
-                  value: `<@${newMember.id}>`,
-                  inline: true,
-                },
-                {
-                  name: t(lang, "events.guildMemberUpdate.field_executor"),
-                  value: `<@${executor.id}>`,
-                  inline: true,
-                },
-                {
-                  name: t(lang, "events.guildMemberUpdate.field_blocked_roles"),
-                  value: blockedRoles,
-                  inline: false,
-                },
-              );
-            await channel.send({ embeds: [embed] }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        logger.error(
-          `[ANTI-RANK] Erreur lors de la réinitialisation des rôles de ${newMember.user.tag}:`,
-          err,
+      // Logique Anti-Rank
+      let shouldRevert = false;
+      if (antiraid.antiRankType === "max") {
+        shouldRevert = true;
+      } else {
+        // "danger" : Rôles avec des permissions sensibles
+        const dangerousPerms = [
+          "Administrator",
+          "ManageGuild",
+          "ManageRoles",
+          "ManageChannels",
+          "BanMembers",
+          "KickMembers",
+          "ManageWebhooks",
+          "ManageMessages",
+        ];
+        shouldRevert = addedRoles.some((role) =>
+          role.permissions.toArray().some((p) => dangerousPerms.includes(p)),
         );
       }
+
+      if (shouldRevert) {
+        try {
+          await newMember.roles.set(
+            oldMember.roles.cache.map((r) => r.id),
+            "Anti-Rank Protection",
+          );
+
+          // Sanctionner l'exécuteur si configuré
+          const execMember = await newMember.guild.members
+            .fetch(executor.id)
+            .catch(() => null);
+          if (execMember) {
+            const actionResult = await client.utils.antiraid.processSanction(
+              execMember,
+              "antiRank",
+              t(
+                lang,
+                "events.guildMemberUpdate.reason_sensitive_role_unauthorized",
+              ),
+              client,
+            );
+            logger.event(
+              `[ANTIRAID] ${executor.tag} sanctionné via antiRank : ${actionResult}`,
+            );
+          }
+
+          const rankLogChannelId =
+            client.db.resolveLogChannel(
+              newMember.guild.id,
+              "modlog",
+              "antirank",
+            ) ||
+            client.db.resolveLogChannel(
+              newMember.guild.id,
+              "raidlog",
+              "antirank",
+            ) ||
+            guildSettings.raidLogsChannel;
+          if (rankLogChannelId) {
+            const channel = newMember.guild.channels.cache.get(
+              rankLogChannelId,
+            );
+            if (channel) {
+              const blockedRoles = (
+                addedRoles.map((r) => `<@&${r.id}>`).join(" ") ||
+                t(lang, "events.guildMemberUpdate.none")
+              ).substring(0, 1024);
+              const embed = client.embedBuilder
+                .base(
+                  client,
+                  t(lang, "events.guildMemberUpdate.antirank_title"),
+                )
+                .addFields(
+                  {
+                    name: t(lang, "events.guildMemberUpdate.field_target"),
+                    value: `<@${newMember.id}>`,
+                    inline: true,
+                  },
+                  {
+                    name: t(lang, "events.guildMemberUpdate.field_executor"),
+                    value: `<@${executor.id}>`,
+                    inline: true,
+                  },
+                  {
+                    name: t(
+                      lang,
+                      "events.guildMemberUpdate.field_blocked_roles",
+                    ),
+                    value: blockedRoles,
+                    inline: false,
+                  },
+                );
+              await channel.send({ embeds: [embed] }).catch(() => {});
+            }
+          }
+        } catch (err) {
+          logger.error(
+            `[ANTI-RANK] Erreur lors de la réinitialisation des rôles de ${newMember.user.tag}:`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      logger.error(
+        `[ANTI-RANK] Erreur lors du traitement anti-rank pour ${newMember.user?.tag || newMember.id}:`,
+        err,
+      );
     }
   },
 };

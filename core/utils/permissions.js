@@ -58,9 +58,20 @@ module.exports = {
         userId,
       );
       if (granularBypasses && Array.isArray(granularBypasses)) {
+        // Liste de modules : "*" ou le module demandé => whitelist granulaire.
         if (granularBypasses.includes("*")) return true;
         if (action && granularBypasses.includes(action)) return true;
-        return false;
+        // Aucune entrée pour ce module précis : on ne refuse pas ici, on
+        // retombe sur la whitelist globale du serveur (ci-dessous).
+      } else if (
+        granularBypasses &&
+        typeof granularBypasses === "object" &&
+        action &&
+        action in granularBypasses
+      ) {
+        // Entrée mapée module -> booléen : true whiteliste, un refus
+        // explicite (false) est respecté sans retomber sur le global.
+        return granularBypasses[action] === true;
       }
     }
 

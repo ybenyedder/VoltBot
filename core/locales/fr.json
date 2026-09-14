@@ -187,7 +187,7 @@
       "usage": "+setavatar [lien/image jointe]"
     },
     "setbanner": {
-      "description": "Change la banniere du bot (necessite Nitro ou bot verifie).",
+      "description": "Définit la bannière du serveur.",
       "no_perm": "Permission insuffisante. Réservé aux owners.",
       "unsupported_file": "Fichier non supporté. Image PNG, JPG, GIF ou WEBP requise.",
       "invalid_link": "Lien invalide. URL http/https requise.",
@@ -208,7 +208,7 @@
       "current": "Actuel",
       "set": "Définie",
       "none": "Aucune",
-      "usage": "Usage",
+      "usage": "+setbanner [lien ou image jointe]",
       "usage_value": "`+setbanner <url>`\n`+setbanner` (avec pièce jointe)",
       "previous": "Précédente",
       "new": "Nouvelle",
@@ -2300,7 +2300,7 @@
     "antilink": {
       "description": "Configure la protection contre les liens.",
       "no_perm": "Permission insuffisante.",
-      "usage_ignore": "Usage: `{{prefix}}antilink ignore <on|off>`.",
+      "usage_ignore": "Usage : `{{prefix}}antilink ignore <on|off> [#salon1 #salon2...]` • `{{prefix}}antilink ignore list` pour la liste • `{{prefix}}antilink ignore clear` pour tout réinitialiser.",
       "channel_ignored": "Salon ignoré.",
       "channel_watched": "Salon surveillé.",
       "usage_sanction": "Usage: `{{prefix}}antilink sanction <on|off>`.",
@@ -2322,7 +2322,17 @@
       "field_type": "Type",
       "field_description": "Description",
       "desc_value": "Bloque les liens et invitations.",
-      "usage": "+antilink <on/off/max> / ignore <on/off> / sanction <on/off> / type <invites/all>"
+      "usage": "+antilink <on/off/max> / ignore <on/off/list/clear> [#salons] / only <#salons/off> / sanction <on/off> / type <invites/all>",
+      "ignored_added": "Anti-link **désactivé** dans : {{channels}}",
+      "ignored_removed": "Anti-link **réactivé** dans : {{channels}}",
+      "ignored_cleared": "Liste des salons ignorés vidée — l'anti-link est de nouveau actif dans tous les salons.",
+      "usage_only": "Usage : `{{prefix}}antilink only <#salon1 #salon2...|off>` — l'anti-link ne sera actif **que** dans les salons donnés.",
+      "only_set": "Mode salons spécifiques : anti-link actif **uniquement** dans : {{channels}}",
+      "only_off": "Mode « salons spécifiques » désactivé — l'anti-link est de nouveau actif dans tous les salons (sauf salons ignorés).",
+      "list_mode_all": "Actif dans **tous** les salons.",
+      "list_mode_only": "Actif **uniquement** dans les salons listés ci-dessous.",
+      "list_only": "Salons spécifiques (anti-link actif uniquement ici)",
+      "list_ignored": "Salons ignorés (anti-link désactivé)"
     },
     "antimassmention": {
       "description": "Active/désactive la protection",
@@ -3113,7 +3123,7 @@
       "no_arg": "Aucun argument fourni.",
       "title": "Configuration : Auto-Rôle",
       "current": "Actuel",
-      "usage": "Usage",
+      "usage": "+setautorole [@Role]",
       "same_value": "Valeur identique. Aucune modification.",
       "invalid_role": "Rôle invalide. Mentionne un rôle ou utilise `+setautorole off`.",
       "before": "Avant",
@@ -3125,7 +3135,7 @@
       "no_arg": "Aucun argument fourni.",
       "title": "Configuration : Salon Avis",
       "current": "Actuel",
-      "usage": "Usage",
+      "usage": "+setavis [#salon]",
       "invalid_channel": "Salon invalide. Mentionne un salon textuel.",
       "same_value": "Valeur identique. Aucune modification.",
       "before": "Avant",
@@ -3140,7 +3150,7 @@
       "title": "Configuration : Anniversaires",
       "channel": "Salon",
       "fallback": "Repli",
-      "usage": "Usage",
+      "usage": "+setbirthdaychannel [#salon / off]",
       "same_value": "Valeur identique. Aucune modification.",
       "invalid_channel": "Salon invalide. Mentionne un salon textuel.",
       "before": "Avant",
@@ -3157,7 +3167,7 @@
       "channel": "Salon",
       "message": "Message",
       "variables": "Variables",
-      "usage": "Usage",
+      "usage": "+setgoodbye [#salon / off / message <texte>]",
       "same_value": "Valeur identique. Aucune modification.",
       "message_missing": "Message manquant. Ex : `+setgoodbye message {user} parti.`",
       "before": "Avant",
@@ -3176,7 +3186,7 @@
       "status": "Statut",
       "message": "Message",
       "variables": "Variables",
-      "usage": "Usage",
+      "usage": "+setgoodbyedm [on / off / <message>]",
       "same_value": "Valeur identique. Aucune modification.",
       "before": "Avant",
       "after": "Après",
@@ -3190,7 +3200,7 @@
       "title": "Configuration : Join Ping",
       "channels": "Salons",
       "mode": "Mode",
-      "usage": "Usage",
+      "usage": "+setjoinping [#salon] [ghost/permanent] / off",
       "same_value": "Valeur identique. Aucune modification.",
       "invalid_channel": "Salon invalide. Mentionne un salon textuel.",
       "before": "Avant",
@@ -4883,6 +4893,14 @@
     "suggestbasic": {
       "description": "Fait une suggestion simple au serveur (sans vote).",
       "usage": "+suggestbasic <texte>"
+    },
+    "honeypot": {
+      "description": "Crée un salon piège à raid (honeypot).",
+      "usage": "+honeypot [create / set #channel / off]"
+    },
+    "snipeurl": {
+      "description": "Surveille et réclame automatiquement une URL personnalisée (vanity) dès qu'elle devient disponible.",
+      "usage": "+snipeurl <code/url> / stop / status / check <code/url>"
     }
   },
   "tickets": {
@@ -5041,6 +5059,15 @@
       "field_executor": "Exécuteur",
       "field_blocked_roles": "Rôles bloqués",
       "reason_sensitive_role_unauthorized": "Attribution de rôle sensible non autorisée"
+    },
+    "honeypot": {
+      "timeout_reason": "Honeypot déclenché (Spam bot détecté)",
+      "log_action": "Honeypot déclenché",
+      "log_reason": "Message envoyé dans le salon piège (Honeypot)",
+      "field_sanction": "Sanction",
+      "sanction_value": "Mute temporaire (5 min)",
+      "field_deleted": "Messages supprimés",
+      "field_channel": "Salon"
     },
     "inviteCreate": {
       "title": "Création d'invitation",
@@ -5245,6 +5272,8 @@
       "received_title": " **• Tu as reçu une lettre anonyme**",
       "received_hint": "> *Le contenu est secret. Clique sur le bouton \"Ouvrir\" pour le découvrir.*",
       "btn_open": "Ouvrir",
+      "btn_send": "Envoyer",
+      "btn_delete": "Supprimer",
       "sent": "Lettre envoyée avec succès !",
       "only_recipient_open": "> Seul le destinataire peut ouvrir cette lettre.",
       "content_not_found": "Contenu introuvable ou expiré.",
@@ -5527,6 +5556,7 @@
     "antiraid": {
       "not_configured": "non configuré",
       "ignored_config": "ignoré (config)",
+      "module_disabled": "ignoré (module antiraid désactivé)",
       "fail_hierarchy": "hiérarchie",
       "fail_hierarchy_target_high": "hiérarchie (rôle cible trop haut)",
       "fail_owner": "propriétaire du serveur",

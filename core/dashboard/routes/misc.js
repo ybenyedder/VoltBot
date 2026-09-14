@@ -1,9 +1,9 @@
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const Logger = require("../../utils/logger.js");
 
 module.exports = function (client, middlewares, helpers) {
   const router = express.Router();
+  const { requireAuth } = middlewares;
 
   router.get("/identify", (req, res) => {
     res.json({
@@ -13,19 +13,15 @@ module.exports = function (client, middlewares, helpers) {
     });
   });
 
-  router.get("/status", (req, res) => {
-    let userPayload = null;
-    if (req.cookies.token) {
-      try {
-        userPayload = jwt.verify(req.cookies.token, process.env.JWT_SECRET);
-      } catch (e) {}
-    }
-
+  // Authentification requise : cette route expose des données sensibles
+  // (utilisateur connecté, bot_settings). requireAuth vérifie le JWT et
+  // renseigne req.user, donc authenticated_user est toujours défini ici.
+  router.get("/status", requireAuth, (req, res) => {
     const botSettings = client.db.getBotSettings() || {};
 
     res.json({
       status: "online",
-      authenticated_user: userPayload,
+      authenticated_user: req.user,
       bot_settings: botSettings,
       stats: {
         guilds: client.guilds.cache.size,

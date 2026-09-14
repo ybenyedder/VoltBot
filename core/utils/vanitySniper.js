@@ -8,6 +8,48 @@ const activeSnipers = new Map();
 // Map pour éviter de spammer les alertes urgentes si non réclamé : guildId -> timestamp
 const lastAlertTimestamps = new Map();
 
+// TTL des entrées de lastAlertTimestamps : purge des timestamps de plus de 24 h
+// pour que la Map reste bornée (elle n'est sinon vidée qu'au stop du sniper).
+const LAST_ALERT_TTL_MS = 24 * 60 * 60 * 1000;
+
+function purgeLastAlertTimestamps() {
+  const cutoff = Date.now() - LAST_ALERT_TTL_MS;
+  for (const [guildId, ts] of lastAlertTimestamps) {
+    if (ts < cutoff) lastAlertTimestamps.delete(guildId);
+  }
+}
+
+// Backoff GLOBAL partagé par toutes les guildes snipées : sur erreur réseau/HTTP
+// (timeout, DNS, socket, 429, 5xx...), on suspend TOUTES les boucles de check au
+// lieu de relancer une requête par guilde 5 s plus tard. Backoff exponentiel
+// (5 s, 10 s, 20 s... plafonné à 5 min), remis à zéro dès qu'une requête aboutit.
+let globalBackoffUntil = 0;
+let globalNetworkErrors = 0;
+const GLOBAL_BACKOFF_MAX_MS = 5 * 60 * 1000;
+
+function registerNetworkBackoff() {
+  // Les erreurs survenant alors qu'un backoff est déjà actif font partie de la
+  // même "vague" (toutes les guildes reprennent en même temps après expiration) :
+  // on n'escalade qu'une fois par vague pour compter des vagues consécutives,
+  // pas le nombre de guildes.
+  const now = Date.now();
+  if (now < globalBackoffUntil) return;
+  globalNetworkErrors++;
+  const delay = Math.min(
+    GLOBAL_BACKOFF_MAX_MS,
+    5000 * 2 ** Math.min(globalNetworkErrors - 1, 10),
+  );
+  globalBackoffUntil = now + delay;
+  Logger.warn(
+    `[SNIPER_URL] Erreur réseau/HTTP — pause globale de ${Math.ceil(delay / 1000)}s de toutes les vérifications (vague #${globalNetworkErrors}).`,
+  );
+}
+
+function resetNetworkBackoff() {
+  globalNetworkErrors = 0;
+  globalBackoffUntil = 0;
+}
+
 /**
  * Nettoie une chaîne pour en extraire le code vanity pur
  * @param {string} input
@@ -43,11 +85,15 @@ async function checkAvailability(code) {
       timeout: 3500,
       headers: { "User-Agent": "VoltBot-VanitySniper/1.0" },
     });
+    resetNetworkBackoff(); // Réponse obtenue : le réseau fonctionne à nouveau
     return { available: false, guild: res.data?.guild };
   } catch (err) {
     if (err.response?.status === 404) {
+      resetNetworkBackoff();
       return { available: true };
     }
+    // Erreur réseau (timeout, DNS, socket) ou HTTP (429, 5xx...) : backoff global
+    registerNetworkBackoff();
     return {
       available: false,
       error: err.message,
@@ -156,6 +202,8 @@ function startSniper(client, guildId, options) {
 
   const performCheck = async () => {
     if (isChecking) return;
+    // Backoff global actif : une erreur réseau récente suspend toutes les guildes
+    if (Date.now() < globalBackoffUntil) return;
     isChecking = true;
 
     try {
@@ -176,6 +224,8 @@ function startSniper(client, guildId, options) {
       }
 
       checkCount++;
+      // Purge périodique de lastAlertTimestamps (> 24 h), ~toutes les 10 minutes
+      if (checkCount % 120 === 0) purgeLastAlertTimestamps();
       const result = await checkAvailability(vanityCode);
 
       if (result.available) {
@@ -218,6 +268,9 @@ function startSniper(client, guildId, options) {
         } else {
           Logger.error(`[SNIPER_URL] Échec lors du claim de ${vanityCode} : ${claimRes.error} (Status: ${claimRes.status})`);
 
+          // Échec réseau (aucun statut HTTP) ou erreur serveur 5xx : backoff global
+          if (!claimRes.status || claimRes.status >= 500) registerNetworkBackoff();
+
           // Gestion du rate-limit (429)
           if (claimRes.status === 429) {
             const retrySec = claimRes.retryAfter || 60;
@@ -257,6 +310,10 @@ function startSniper(client, guildId, options) {
       }
     } catch (err) {
       Logger.error(`[SNIPER_URL] Erreur dans la boucle de vérification :`, err);
+      // Erreur réseau imprévue remontée jusqu'ici (timeout, DNS, socket réinitialisé)
+      if (typeof err?.code === "string" && /^(ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ERR_NETWORK)/.test(err.code)) {
+        registerNetworkBackoff();
+      }
     } finally {
       isChecking = false;
     }
@@ -321,7 +378,17 @@ function notifyUrgentAvailable(client, guild, code, channelId, userId) {
     )
     .setTimestamp();
 
-  const content = userId ? `<@${userId}>` : "@everyone";
+  // Plus de fallback "@everyone" : un ping massif involontaire est plus
+  // perturbant qu'une alerte sans mention. On mentionne le propriétaire du
+  // sniper s'il est connu (paramètre, sinon enregistrement en base) ; à défaut,
+  // le message part sans aucun ping.
+  let content;
+  if (userId) {
+    content = `<@${userId}>`;
+  } else {
+    const ownerId = client.db?.getVanitySniper?.(guild.id)?.userId;
+    content = ownerId ? `<@${ownerId}>` : undefined;
+  }
   channel.send({ content, embeds: [embed] }).catch(() => {});
 }
 
@@ -360,6 +427,8 @@ function stopSniper(client, guildId, updateDb = true) {
     clearInterval(current.interval);
     activeSnipers.delete(guildId);
   }
+  // Nettoyage immédiat du timestamp d'alerte de cette guilde
+  lastAlertTimestamps.delete(guildId);
   if (updateDb && client?.db?.updateVanitySniper) {
     client.db.updateVanitySniper(guildId, { status: "stopped", lastCheck: Date.now() });
   }

@@ -158,6 +158,9 @@ export async function apiFetch(endpoint, options = {}) {
     // Rediriger vers le login si non autorisé (sauf sur la page de login elle-même)
     if (window.location.pathname !== "/") {
       window.location.replace("/");
+      // Interrompre ici : la réponse 401 ne doit pas être consommée
+      // par les callers pendant la redirection.
+      return Promise.reject(new Error("Session expirée"));
     }
   }
 

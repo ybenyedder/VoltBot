@@ -4,7 +4,7 @@ const fmtNum = (n) => new Intl.NumberFormat("fr-FR").format(n);
 
 module.exports = {
   name: "purge",
-  aliases: ["clear"],
+  aliases: [],
   description: "Supprime un certain nombre de messages dans le salon.",
   category: "moderation",
   usage: "+purge [nombre]",

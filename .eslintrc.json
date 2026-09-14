@@ -11,13 +11,16 @@
   },
   "extends": ["eslint:recommended"],
   "rules": {
-    "no-unused-vars": "warn",
+    "no-unused-vars": [
+      "warn",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
     "no-undef": "error",
     "no-console": "off",
     "prefer-const": "warn",
     "no-var": "error",
     "eqeqeq": ["warn", "smart"],
-    "no-empty": "warn",
+    "no-empty": ["warn", { "allowEmptyCatch": true }],
     "no-irregular-whitespace": "warn",
     "no-constant-condition": ["warn", { "checkLoops": false }],
     "no-useless-escape": "warn",

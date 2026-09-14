@@ -187,7 +187,7 @@
       "usage": "+setavatar [link/attached image]"
     },
     "setbanner": {
-      "description": "Changes the bot's banner (requires Nitro or a verified bot).",
+      "description": "Sets the server banner.",
       "no_perm": "Insufficient permission. Reserved for owners.",
       "unsupported_file": "Unsupported file. A PNG, JPG, GIF or WEBP image is required.",
       "invalid_link": "Invalid link. An http/https URL is required.",
@@ -208,7 +208,7 @@
       "current": "Current",
       "set": "Set",
       "none": "None",
-      "usage": "Usage",
+      "usage": "+setbanner [link or attached image]",
       "usage_value": "`+setbanner <url>`\n`+setbanner` (with attachment)",
       "previous": "Previous",
       "new": "New",
@@ -2300,7 +2300,7 @@
     "antilink": {
       "description": "Configure protection against links.",
       "no_perm": "Insufficient permission.",
-      "usage_ignore": "Usage: `{{prefix}}antilink ignore <on|off>`.",
+      "usage_ignore": "Usage: `{{prefix}}antilink ignore <on|off> [#channel1 #channel2...]` • `{{prefix}}antilink ignore list` to view • `{{prefix}}antilink ignore clear` to reset.",
       "channel_ignored": "Channel ignored.",
       "channel_watched": "Channel monitored.",
       "usage_sanction": "Usage: `{{prefix}}antilink sanction <on|off>`.",
@@ -2322,7 +2322,17 @@
       "field_type": "Type",
       "field_description": "Description",
       "desc_value": "Blocks links and invites.",
-      "usage": "+antilink <on/off/max> / ignore <on/off> / sanction <on/off> / type <invites/all>"
+      "usage": "+antilink <on/off/max> / ignore <on/off/list/clear> [#channels] / only <#channels/off> / sanction <on/off> / type <invites/all>",
+      "ignored_added": "Anti-link **disabled** in: {{channels}}",
+      "ignored_removed": "Anti-link **re-enabled** in: {{channels}}",
+      "ignored_cleared": "Ignored channels list cleared — anti-link is active in every channel again.",
+      "usage_only": "Usage: `{{prefix}}antilink only <#channel1 #channel2...|off>` — anti-link will only be active in the given channels.",
+      "only_set": "Specific channels mode: anti-link active **only** in: {{channels}}",
+      "only_off": "\"Specific channels\" mode disabled — anti-link is active in every channel again (except ignored ones).",
+      "list_mode_all": "Active in **all** channels.",
+      "list_mode_only": "Active **only** in the channels listed below.",
+      "list_only": "Specific channels (anti-link active only here)",
+      "list_ignored": "Ignored channels (anti-link disabled)"
     },
     "antimassmention": {
       "description": "Enables/disables the protection",
@@ -3113,7 +3123,7 @@
       "no_arg": "No argument provided.",
       "title": "Configuration: Auto-Role",
       "current": "Current",
-      "usage": "Usage",
+      "usage": "+setautorole [@Role]",
       "same_value": "Same value. No change made.",
       "invalid_role": "Invalid role. Mention a role or use `+setautorole off`.",
       "before": "Before",
@@ -3125,7 +3135,7 @@
       "no_arg": "No argument provided.",
       "title": "Configuration: Reviews Channel",
       "current": "Current",
-      "usage": "Usage",
+      "usage": "+setavis [#channel]",
       "invalid_channel": "Invalid channel. Mention a text channel.",
       "same_value": "Same value. No change made.",
       "before": "Before",
@@ -3140,7 +3150,7 @@
       "title": "Configuration: Birthdays",
       "channel": "Channel",
       "fallback": "Fallback",
-      "usage": "Usage",
+      "usage": "+setbirthdaychannel [#channel / off]",
       "same_value": "Same value. No change made.",
       "invalid_channel": "Invalid channel. Mention a text channel.",
       "before": "Before",
@@ -3157,7 +3167,7 @@
       "channel": "Channel",
       "message": "Message",
       "variables": "Variables",
-      "usage": "Usage",
+      "usage": "+setgoodbye [#channel / off / message <text>]",
       "same_value": "Same value. No change made.",
       "message_missing": "Message missing. Ex: `+setgoodbye message {user} parti.`",
       "before": "Before",
@@ -3176,7 +3186,7 @@
       "status": "Status",
       "message": "Message",
       "variables": "Variables",
-      "usage": "Usage",
+      "usage": "+setgoodbyedm [on / off / <message>]",
       "same_value": "Same value. No change made.",
       "before": "Before",
       "after": "After",
@@ -3190,7 +3200,7 @@
       "title": "Configuration: Join Ping",
       "channels": "Channels",
       "mode": "Mode",
-      "usage": "Usage",
+      "usage": "+setjoinping [#channel] [ghost/permanent] / off",
       "same_value": "Same value. No change made.",
       "invalid_channel": "Invalid channel. Mention a text channel.",
       "before": "Before",
@@ -4883,6 +4893,14 @@
     "suggestbasic": {
       "description": "Makes a simple suggestion to the server (no voting).",
       "usage": "+suggestbasic <text>"
+    },
+    "honeypot": {
+      "description": "Creates a honeypot channel to trap raiders.",
+      "usage": "+honeypot [create / set #channel / off]"
+    },
+    "snipeurl": {
+      "description": "Watches and automatically claims a custom (vanity) URL as soon as it becomes available.",
+      "usage": "+snipeurl <code/url> / stop / status / check <code/url>"
     }
   },
   "tickets": {
@@ -5041,6 +5059,15 @@
       "field_executor": "Executor",
       "field_blocked_roles": "Blocked roles",
       "reason_sensitive_role_unauthorized": "Unauthorized assignment of a sensitive role"
+    },
+    "honeypot": {
+      "timeout_reason": "Honeypot triggered (spam bot detected)",
+      "log_action": "Honeypot Triggered",
+      "log_reason": "Message sent in the trap channel (Honeypot)",
+      "field_sanction": "Sanction",
+      "sanction_value": "Temporary mute (5 min)",
+      "field_deleted": "Deleted messages",
+      "field_channel": "Channel"
     },
     "inviteCreate": {
       "title": "Invite created",
@@ -5245,6 +5272,8 @@
       "received_title": " **• You received an anonymous letter**",
       "received_hint": "> *The content is secret. Click the \"Open\" button to discover it.*",
       "btn_open": "Open",
+      "btn_send": "Send",
+      "btn_delete": "Delete",
       "sent": "Letter sent successfully!",
       "only_recipient_open": "> Only the recipient can open this letter.",
       "content_not_found": "Content not found or expired.",
@@ -5527,6 +5556,7 @@
     "antiraid": {
       "not_configured": "not configured",
       "ignored_config": "ignored (config)",
+      "module_disabled": "ignored (antiraid module disabled)",
       "fail_hierarchy": "hierarchy",
       "fail_hierarchy_target_high": "hierarchy (target role too high)",
       "fail_owner": "server owner",

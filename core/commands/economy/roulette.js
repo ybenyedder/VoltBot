@@ -77,6 +77,13 @@ module.exports = {
     if (luckyCharm && luckyCharm.amount > 0 && Math.random() > 0.7) {
       if (color === "black") rand = (Math.floor(Math.random() * 18) + 1) * 2;
       else if (color === "red") rand = Math.floor(Math.random() * 18) * 2 + 1;
+      // L'effet se déclenche : le charm est consommé (buff non permanent).
+      client.db.decrementItem(
+        message.author.id,
+        message.guild.id,
+        "lucky_charm",
+        1,
+      );
     }
 
     const resultColor = rand === 0 ? "green" : rand % 2 === 0 ? "black" : "red";

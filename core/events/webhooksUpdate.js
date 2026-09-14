@@ -7,8 +7,16 @@ module.exports = {
   async execute(channel, client) {
     if (!channel.guild) return;
 
+    // Gate par module antiraid (toggle dashboard) — la suppression du webhook
+    // et la sanction sont désactivées ensemble. Redondant avec la gate de
+    // processSanction.
     const config = client.db.getAntiraidConfig(channel.guild.id);
-    if (!config || !(config.antiWebhook > 0)) return;
+    if (
+      !client.db.isModuleEnabled(channel.guild.id, "antiraid") ||
+      !config ||
+      !(config.antiWebhook > 0)
+    )
+      return;
 
     try {
       await new Promise((r) => setTimeout(r, 1000));
@@ -43,7 +51,7 @@ module.exports = {
           channel.guild.id,
           client,
           null,
-          "antiNuke",
+          "antiWebhook",
         )
       )
         return;

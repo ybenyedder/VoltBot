@@ -33,7 +33,9 @@ const Login = () => {
         // Non connecté.
       }
     };
-    if (sessionStorage.getItem("bot_port")) checkLogin();
+    // Même clé que api.js (localStorage "api_bot_port") — était sessionStorage
+    // "bot_port", jamais écrit : le check de session ne s'exécutait jamais.
+    if (localStorage.getItem("api_bot_port")) checkLogin();
   }, [navigate]);
 
   const handleConnect = async () => {
@@ -73,18 +75,18 @@ const Login = () => {
   const features = [
     {
       icon: Zap,
-      title: "Temps réel",
-      desc: "Changements appliqués sans redémarrage.",
+      title: t("login.features.realtime_title"),
+      desc: t("login.features.realtime_desc"),
     },
     {
       icon: ShieldCheck,
-      title: "Anti-raid",
-      desc: "Filtres et seuils granulaires.",
+      title: t("login.features.antiraid_title"),
+      desc: t("login.features.antiraid_desc"),
     },
     {
       icon: BarChart3,
-      title: "Métriques",
-      desc: "Activité et commandes en un graphe.",
+      title: t("login.features.metrics_title"),
+      desc: t("login.features.metrics_desc"),
     },
   ];
 
@@ -191,7 +193,7 @@ const Login = () => {
             </span>
           </h1>
           <p className="mt-5 max-w-md text-base text-zinc-400 sm:text-lg">
-            Configure ton serveur Discord en quelques clics.
+            {t("login.tagline")}
           </p>
 
           {/* Login card */}
@@ -202,7 +204,7 @@ const Login = () => {
                   htmlFor="bot-id"
                   className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500"
                 >
-                  Identifiant
+                  {t("login.bot_id")}
                 </label>
                 <input
                   id="bot-id"
@@ -220,7 +222,7 @@ const Login = () => {
                   htmlFor="bot-phrase"
                   className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500"
                 >
-                  Phrase
+                  {t("login.phrase")}
                 </label>
                 <input
                   id="bot-phrase"

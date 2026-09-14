@@ -9,6 +9,7 @@ const BLURPLE = "#5865F2";
 
 // Code block with copy-to-clipboard + transient "Copié" toast.
 function CodeBlock({ children, label }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -35,18 +36,22 @@ function CodeBlock({ children, label }) {
       </pre>
       <button
         onClick={handleCopy}
-        aria-label={copied ? "Copié" : `Copier ${label || "le code"}`}
+        aria-label={
+          copied
+            ? t("doc.copied")
+            : t("doc.copy_aria", { label: label || t("doc.code_default") })
+        }
         className="absolute right-2 top-2 flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-zinc-900/80 px-2 text-[11px] text-zinc-400 opacity-0 transition-all hover:text-zinc-100 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5cff]/60"
       >
         {copied ? (
           <>
             <Check size={12} className="text-emerald-400" aria-hidden="true" />
-            <span>Copié</span>
+            <span>{t("doc.copied")}</span>
           </>
         ) : (
           <>
             <Copy size={12} aria-hidden="true" />
-            <span>Copier</span>
+            <span>{t("doc.copy")}</span>
           </>
         )}
       </button>

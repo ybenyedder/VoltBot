@@ -1,6 +1,7 @@
 const { AttachmentBuilder } = require("discord.js");
 const { findBadword } = require("../utils/badwords");
 const { t } = require("../utils/i18n");
+const { createLinkRegex } = require("./handlers/linkRegex");
 
 module.exports = {
   name: "messageUpdate",
@@ -50,144 +51,152 @@ module.exports = {
 
     const mentionThreshold = antiraidConfig.mentionLimit || 5;
     // Exemption are now checked per-feature below
-    if (true) {
-      // 1. Anti-Liens
-      if (
-        antiraidConfig.antiLink > 0 &&
-        !permissions.isWhitelisted(
-          newMessage.author.id,
-          newMessage.guild.id,
-          client,
-          guildSettings,
-          "antiLink",
-        )
-      ) {
-        let ignoredLinks = [];
+    // 1. Anti-Liens
+    if (
+      antiraidConfig.antiLink > 0 &&
+      !permissions.isWhitelisted(
+        newMessage.author.id,
+        newMessage.guild.id,
+        client,
+        guildSettings,
+        "antiLink",
+      )
+    ) {
+      const parseChannelList = (raw) => {
         try {
-          ignoredLinks = JSON.parse(
-            antiraidConfig.antiLinkIgnoredChannels || "[]",
-          );
-          if (!Array.isArray(ignoredLinks)) ignoredLinks = [];
+          const parsed = JSON.parse(raw || "[]");
+          return Array.isArray(parsed) ? parsed : [];
         } catch {
-          ignoredLinks = [];
+          return [];
         }
-        if (!ignoredLinks.includes(newMessage.channel.id)) {
-          const inviteRegex =
-            /(discord\.gg\/[^\s]+|discord\.com\/invite\/[^\s]+|discordapp\.com\/invite\/[^\s]+|dsc\.gg\/[^\s]+|invite\.gg\/[^\s]+)/gi;
-          const linkRegex =
-            /(https?:\/\/[^\s]+|bit\.ly\/[^\s]+|[a-zA-Z0-9-]+\.[a-z]{2,}\/(invite|[^\s]*https?))/gi;
+      };
+      // Mode « salons spécifiques » : anti-link actif uniquement dans la
+      // liste si remplie, sinon partout sauf les salons ignorés
+      const onlyLinks = parseChannelList(antiraidConfig.antiLinkOnlyChannels);
+      const ignoredLinks = parseChannelList(
+        antiraidConfig.antiLinkIgnoredChannels,
+      );
+      const linkAppliesHere = onlyLinks.length
+        ? onlyLinks.includes(newMessage.channel.id)
+        : !ignoredLinks.includes(newMessage.channel.id);
+      if (linkAppliesHere) {
+        const inviteRegex =
+          /(discord\.gg\/[^\s]+|discord\.com\/invite\/[^\s]+|discordapp\.com\/invite\/[^\s]+|dsc\.gg\/[^\s]+|invite\.gg\/[^\s]+)/gi;
+        // Regex partagée avec l'automod (version stricte) : même détection
+        // sur édition que sur création, pas de contournement possible.
+        const linkRegex = createLinkRegex();
 
-          let hasLink = false;
-          if (antiraidConfig.antiLinkType === "invites") {
-            if (inviteRegex.test(newMessage.content)) hasLink = true;
-          } else {
-            if (
-              inviteRegex.test(newMessage.content) ||
-              linkRegex.test(newMessage.content)
-            )
-              hasLink = true;
-          }
-
-          if (hasLink) {
-            newMessage.delete().catch(() => {});
-            const actionStr =
-              antiraidConfig.antiLinkSanction === 0
-                ? t(lang, "events.messageUpdate.action_deleted")
-                : await antiraid.processSanction(
-                    newMessage.member,
-                    "antiLink",
-                    t(lang, "events.messageUpdate.reason_unauthorized_link"),
-                    client,
-                  );
-            return newMessage.channel
-              .send({
-                content: t(lang, "events.messageUpdate.antilink_sanction", {
-                  user: newMessage.author,
-                  action: actionStr,
-                }),
-              })
-              .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
-          }
+        let hasLink = false;
+        if (antiraidConfig.antiLinkType === "invites") {
+          if (inviteRegex.test(newMessage.content)) hasLink = true;
+        } else {
+          if (
+            inviteRegex.test(newMessage.content) ||
+            linkRegex.test(newMessage.content)
+          )
+            hasLink = true;
         }
-      }
 
-      // 2. Anti-Mots-Interdits
-      const antiBadWordsEnabled =
-        (antiraidConfig.antiBadWords ?? guildSettings.antiBadWords) > 0;
-      if (
-        antiBadWordsEnabled &&
-        !permissions.isWhitelisted(
-          newMessage.author.id,
-          newMessage.guild.id,
-          client,
-          guildSettings,
-          "antiBadWords",
-        )
-      ) {
-        try {
-          const words = client.db.db
-            .prepare("SELECT word FROM badwords WHERE guildId = ?")
-            .all(newMessage.guild.id);
-          if (words && words.length > 0) {
-            const found = findBadword(newMessage.content, words);
-
-            if (found) {
-              newMessage.delete().catch(() => {});
-              const actionStr = await antiraid.processSanction(
-                newMessage.member,
-                "antiBadWords",
-                t(lang, "events.messageUpdate.reason_banned_word", {
-                  word: found.word,
-                }),
-                client,
-              );
-              return newMessage.channel
-                .send({
-                  content: t(lang, "events.messageUpdate.antibadword_sanction", {
-                    user: newMessage.author,
-                    action: actionStr,
-                  }),
-                })
-                .then((m) =>
-                  setTimeout(() => m.delete().catch(() => {}), 8000),
-                );
-            }
-          }
-        } catch (e) {
-          client.logger.error(
-            `[MESSAGE_UPDATE] Error processing anti-bad-words for guild ${newMessage.guild.id}: ${e.message}`,
-          );
-        }
-      }
-
-      // 3. Anti-Mass-Mention
-      if (
-        antiraidConfig.antiMassMention > 0 &&
-        !permissions.isWhitelisted(
-          newMessage.author.id,
-          newMessage.guild.id,
-          client,
-          guildSettings,
-          "antiMassMention",
-        )
-      ) {
-        if (newMessage.mentions.users.size > mentionThreshold) {
+        if (hasLink) {
           newMessage.delete().catch(() => {});
-          const actionStr = await antiraid.processSanction(
-            newMessage.member,
-            "antiMassMention",
-            t(lang, "events.messageUpdate.reason_mass_mention"),
-            client,
-          );
+          const actionStr =
+            antiraidConfig.antiLinkSanction === 0
+              ? t(lang, "events.messageUpdate.action_deleted")
+              : await antiraid.processSanction(
+                  newMessage.member,
+                  "antiLink",
+                  t(lang, "events.messageUpdate.reason_unauthorized_link"),
+                  client,
+                );
           return newMessage.channel
             .send({
-              content: t(lang, "events.messageUpdate.antimassmention_sanction", {
+              content: t(lang, "events.messageUpdate.antilink_sanction", {
                 user: newMessage.author,
                 action: actionStr,
               }),
             })
-            .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000));
+            .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+            .catch(() => {});
         }
+      }
+    }
+
+    // 2. Anti-Mots-Interdits
+    const antiBadWordsEnabled =
+      (antiraidConfig.antiBadWords ?? guildSettings.antiBadWords) > 0;
+    if (
+      antiBadWordsEnabled &&
+      !permissions.isWhitelisted(
+        newMessage.author.id,
+        newMessage.guild.id,
+        client,
+        guildSettings,
+        "antiBadWords",
+      )
+    ) {
+      try {
+        const words = client.db.db
+          .prepare("SELECT word FROM badwords WHERE guildId = ?")
+          .all(newMessage.guild.id);
+        if (words && words.length > 0) {
+          const found = findBadword(newMessage.content, words);
+
+          if (found) {
+            newMessage.delete().catch(() => {});
+            const actionStr = await antiraid.processSanction(
+              newMessage.member,
+              "antiBadWords",
+              t(lang, "events.messageUpdate.reason_banned_word", {
+                word: found.word,
+              }),
+              client,
+            );
+            return newMessage.channel
+              .send({
+                content: t(lang, "events.messageUpdate.antibadword_sanction", {
+                  user: newMessage.author,
+                  action: actionStr,
+                }),
+              })
+              .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+              .catch(() => {});
+          }
+        }
+      } catch (e) {
+        client.logger.error(
+          `[MESSAGE_UPDATE] Error processing anti-bad-words for guild ${newMessage.guild.id}: ${e.message}`,
+        );
+      }
+    }
+
+    // 3. Anti-Mass-Mention
+    if (
+      antiraidConfig.antiMassMention > 0 &&
+      !permissions.isWhitelisted(
+        newMessage.author.id,
+        newMessage.guild.id,
+        client,
+        guildSettings,
+        "antiMassMention",
+      )
+    ) {
+      if (newMessage.mentions.users.size > mentionThreshold) {
+        newMessage.delete().catch(() => {});
+        const actionStr = await antiraid.processSanction(
+          newMessage.member,
+          "antiMassMention",
+          t(lang, "events.messageUpdate.reason_mass_mention"),
+          client,
+        );
+        return newMessage.channel
+          .send({
+            content: t(lang, "events.messageUpdate.antimassmention_sanction", {
+              user: newMessage.author,
+              action: actionStr,
+            }),
+          })
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000))
+          .catch(() => {});
       }
     }
 

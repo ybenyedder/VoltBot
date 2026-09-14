@@ -1,4 +1,5 @@
 import React from "react";
+import { withTranslation } from "react-i18next";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -23,15 +24,16 @@ class ErrorBoundary extends React.Component {
   }
 
   async handleCopy() {
+    const { t } = this.props;
     const { error, errorInfo } = this.state;
     const payload = [
-      `Message: ${error?.message ?? "Erreur inconnue"}`,
+      `Message: ${error?.message ?? t("errorBoundary.unknown_error")}`,
       "",
       "Stack:",
-      error?.stack ?? "(non disponible)",
+      error?.stack ?? t("errorBoundary.unavailable"),
       "",
       "Component stack:",
-      errorInfo?.componentStack ?? "(non disponible)",
+      errorInfo?.componentStack ?? t("errorBoundary.unavailable"),
     ].join("\n");
 
     try {
@@ -61,8 +63,10 @@ class ErrorBoundary extends React.Component {
       return this.props.children;
     }
 
+    const { t } = this.props;
     const { error, errorInfo, copied } = this.state;
-    const message = error?.message || "Une erreur inattendue est survenue.";
+    const message =
+      error?.message || t("errorBoundary.unexpected_error");
 
     return (
       <div className="min-h-screen w-full bg-neutral-950 text-neutral-100 flex items-center justify-center px-4 py-10">
@@ -77,19 +81,17 @@ class ErrorBoundary extends React.Component {
               className="inline-block h-2.5 w-2.5 rounded-full bg-accent-500 shadow-[0_0_12px_2px_rgba(124,92,255,0.6)]"
             />
             <h1 className="text-lg sm:text-xl font-semibold tracking-tightish text-neutral-50">
-              Oups, quelque chose s'est mal passe
+              {t("errorBoundary.title")}
             </h1>
           </div>
 
           <p className="mt-3 text-sm text-neutral-300">
-            L'interface a rencontre une erreur et n'a pas pu s'afficher
-            correctement. Vous pouvez recharger la page ou copier le detail
-            technique pour le signaler.
+            {t("errorBoundary.desc")}
           </p>
 
           <div className="mt-5 rounded-lg bg-neutral-950/80 ring-1 ring-neutral-800 px-3 py-2.5">
             <p className="text-xs uppercase tracking-wide text-neutral-500">
-              Message
+              {t("errorBoundary.message")}
             </p>
             <p className="mt-1 font-mono text-sm text-accent-200 break-words">
               {message}
@@ -99,7 +101,7 @@ class ErrorBoundary extends React.Component {
           {errorInfo?.componentStack ? (
             <details className="mt-3 group">
               <summary className="cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 select-none">
-                Afficher la pile des composants
+                {t("errorBoundary.component_stack")}
               </summary>
               <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-neutral-950/80 ring-1 ring-neutral-800 p-3 text-[11px] leading-relaxed text-neutral-400 font-mono whitespace-pre-wrap">
                 {errorInfo.componentStack.trim()}
@@ -113,14 +115,16 @@ class ErrorBoundary extends React.Component {
               onClick={this.handleReload}
               className="inline-flex items-center justify-center rounded-lg bg-accent-500 hover:bg-accent-400 active:bg-accent-600 text-white text-sm font-medium px-4 py-2.5 ring-1 ring-accent-400/60 shadow-soft transition focus:outline-none focus:ring-2 focus:ring-accent-300"
             >
-              Recharger la page
+              {t("errorBoundary.reload")}
             </button>
             <button
               type="button"
               onClick={this.handleCopy}
               className="inline-flex items-center justify-center rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-100 text-sm font-medium px-4 py-2.5 ring-1 ring-neutral-700 transition focus:outline-none focus:ring-2 focus:ring-accent-400/60"
             >
-              {copied ? "Detail copie" : "Copier le detail"}
+              {copied
+                ? t("errorBoundary.copied")
+                : t("errorBoundary.copy")}
             </button>
           </div>
         </div>
@@ -129,4 +133,4 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default ErrorBoundary;
+export default withTranslation()(ErrorBoundary);

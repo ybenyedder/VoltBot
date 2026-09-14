@@ -1,6 +1,28 @@
 const express = require("express");
+const crypto = require("crypto");
 const Logger = require("../../utils/logger.js");
 const { t } = require("../../utils/i18n");
+const { hashPhrase, verifyPhrase } = require("./auth.js");
+
+// Clé opaque par phrase (sha256 tronqué de la valeur stockée) : permet à l'UI
+// de viser une ligne pour la suppression sans jamais exposer la phrase (en
+// clair ou hachée). La table speed_phrases n'a ni id ni createdAt (PK =
+// phrase), d'où cette clé dérivée.
+function phraseRowKey(stored) {
+  return crypto
+    .createHash("sha256")
+    .update(String(stored))
+    .digest("hex")
+    .substring(0, 12);
+}
+
+// Préfixe masqué type "abc***" — uniquement pour les phrases legacy encore
+// en clair ; les phrases hachées n'exposent rien.
+function maskedPreview(stored) {
+  if (typeof stored !== "string" || stored === "") return "***";
+  if (stored.startsWith("scrypt$")) return "•••••";
+  return stored.length <= 3 ? "***" : `${stored.substring(0, 3)}***`;
+}
 
 module.exports = function (client, middlewares, helpers) {
   const router = express.Router();
@@ -10,7 +32,19 @@ module.exports = function (client, middlewares, helpers) {
   router.get("/speedphrases", requireAuth, requireGlobalOwner, (req, res) => {
     try {
       const phrases = client.db.getSpeedPhrases();
-      res.json(phrases);
+      // Métadonnées uniquement : ni la phrase ni le hash complet ne sortent
+      // de l'API. `phrase` reste une clé de suppression opaque pour l'UI.
+      res.json(
+        phrases.map((p) => {
+          const key = phraseRowKey(p.phrase);
+          return {
+            id: key,
+            phrase: key, // compat client : clé passée à DELETE
+            name: p.name,
+            masked: maskedPreview(p.phrase),
+          };
+        }),
+      );
     } catch (error) {
       Logger.error(`[DASHBOARD SPEEDPHRASE GET] reqId=${req.reqId}`, error);
       res.status(500).json({
@@ -31,7 +65,18 @@ module.exports = function (client, middlewares, helpers) {
       return res.status(400).json({ error: "Phrase et nom requis" });
     }
     try {
-      client.db.addSpeedPhrase(phrase.trim(), name.trim());
+      const submitted = phrase.trim();
+      // Anti-doublon : le sel scrypt étant aléatoire, on détecte les doublons
+      // par vérification avant d'insérer un nouveau hash.
+      const duplicate = client.db
+        .getSpeedPhrases()
+        .some((p) => verifyPhrase(submitted, p.phrase));
+      if (duplicate) {
+        return res.status(409).json({ error: "Cette phrase existe déjà" });
+      }
+      // Hachage AVANT stockage : plus jamais de phrase en clair en DB via
+      // cette route.
+      client.db.addSpeedPhrase(hashPhrase(submitted), name.trim());
       logDashboardAction(
         null,
         req.user.id,
@@ -54,14 +99,26 @@ module.exports = function (client, middlewares, helpers) {
     requireAuth,
     requireGlobalOwner,
     (req, res) => {
-      const phrase = decodeURIComponent(req.params.phrase || "");
-      if (!phrase.trim()) {
+      const submitted = decodeURIComponent(req.params.phrase || "");
+      if (!submitted.trim()) {
         return res
           .status(400)
           .json({ error: t(req.lang, "dashboard.system.speedphrase_invalid") });
       }
       try {
-        client.db.removeSpeedPhrase(phrase);
+        // Le paramètre est soit la clé opaque renvoyée par le GET, soit la
+        // phrase en clair (compat appel direct) — on supprime la valeur
+        // STOCKÉE correspondante (hash ou legacy).
+        const row = client.db
+          .getSpeedPhrases()
+          .find(
+            (p) => phraseRowKey(p.phrase) === submitted ||
+              verifyPhrase(submitted, p.phrase),
+          );
+        if (!row) {
+          return res.status(404).json({ error: "Phrase introuvable" });
+        }
+        client.db.removeSpeedPhrase(row.phrase);
         logDashboardAction(
           null,
           req.user.id,

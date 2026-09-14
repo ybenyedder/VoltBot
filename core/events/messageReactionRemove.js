@@ -74,7 +74,8 @@ module.exports = {
     try {
       const guildSettings = client.db.getGuild(guild.id);
       if (!guildSettings || !guildSettings.starboardChannel) return;
-      if (reaction.emoji.name !== "" && reaction.emoji.name !== "star")
+      // Même condition que messageReactionAdd (les deux variantes unicode).
+      if (reaction.emoji.name !== "⭐" && reaction.emoji.name !== "⭐️")
         return;
 
       const requiredStars = guildSettings.starboardCount || 3;
@@ -107,7 +108,7 @@ module.exports = {
         // Toujours au-dessus du seuil : mettre à jour le compteur
         const oldEmbed = existing.embeds[0];
         const newEmbed = EmbedBuilder.from(oldEmbed).setTitle(
-          ` ${reaction.count}`,
+          `⭐ ${reaction.count}`,
         );
         await existing
           .edit({ embeds: [newEmbed] })

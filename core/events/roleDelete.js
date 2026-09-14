@@ -99,36 +99,40 @@ module.exports = {
           const nukeLimit = config.nukeRoleLimit || 3;
           const isNuke = config.antiNuke > 0 && userData.count >= nukeLimit;
 
-          const member = await role.guild.members
-            .fetch(executor.id)
-            .catch(() => null);
-          if (member) {
-            const actionResult = await client.utils.antiraid.processSanction(
-              member,
-              "antiRole",
-              t(lang, "events.roleDelete.reason_unauthorized"),
-              client,
-            );
-            logger.event(
-              `[ANTI-ROLE] ${executor.tag} sanctionné — suppression de rôle : ${actionResult}`,
-            );
-
-            // Recréer le rôle supprimé
-            await role.guild.roles
-              .create({
-                name: role.name,
-                color: role.color,
-                hoist: role.hoist,
-                permissions: role.permissions.bitfield,
-                position: role.position,
-                mentionable: role.mentionable,
-                reason: t(lang, "events.roleDelete.reason_recreate"),
-              })
-              .catch((e) =>
-                logger.warn(
-                  `[ANTI-ROLE] Impossible de recréer le rôle: ${e.message}`,
-                ),
+          // Sanction uniquement en mode max (2) ou si le seuil nuke est atteint,
+          // et non dès la première suppression.
+          if (config.antiRole === 2 || isNuke) {
+            const member = await role.guild.members
+              .fetch(executor.id)
+              .catch(() => null);
+            if (member) {
+              const actionResult = await client.utils.antiraid.processSanction(
+                member,
+                "antiRole",
+                t(lang, "events.roleDelete.reason_unauthorized"),
+                client,
               );
+              logger.event(
+                `[ANTI-ROLE] ${executor.tag} sanctionné — suppression de rôle : ${actionResult}`,
+              );
+
+              // Recréer le rôle supprimé
+              await role.guild.roles
+                .create({
+                  name: role.name,
+                  color: role.color,
+                  hoist: role.hoist,
+                  permissions: role.permissions.bitfield,
+                  position: role.position,
+                  mentionable: role.mentionable,
+                  reason: t(lang, "events.roleDelete.reason_recreate"),
+                })
+                .catch((e) =>
+                  logger.warn(
+                    `[ANTI-ROLE] Impossible de recréer le rôle: ${e.message}`,
+                  ),
+                );
+            }
           }
         }
       }

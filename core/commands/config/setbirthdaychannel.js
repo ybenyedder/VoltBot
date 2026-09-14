@@ -3,7 +3,7 @@ const permissions = require("../../utils/permissions");
 
 module.exports = {
   name: "setbirthdaychannel",
-  aliases: ["setbday", "birthdaychan"],
+  aliases: ["birthdaychan"],
   description: "Définit le salon dédié aux annonces d'anniversaires.",
   category: "config",
   usage: "+setbirthdaychannel [#salon | off]",

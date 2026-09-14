@@ -30,6 +30,17 @@ module.exports = {
       }
     } catch (e) {}
 
+    // Invalider le cache module DB du serveur (méthode ajoutée côté database ;
+    // appel conditionnel pour éviter tout crash si absente)
+    try {
+      if (
+        client.db &&
+        typeof client.db.invalidateModuleCache === "function"
+      ) {
+        client.db.invalidateModuleCache(guild.id);
+      }
+    } catch (e) {}
+
     // Notifier le propriétaire global du bot si en ligne
     try {
       const ownerIds = process.env.OWNER_ID

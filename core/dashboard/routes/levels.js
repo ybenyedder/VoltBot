@@ -13,6 +13,14 @@ module.exports = function (client, middlewares, helpers) {
     requireGuildAdmin,
     async (req, res) => {
       try {
+        // Contrôle du guild AVANT les requêtes SQL : inutile d'interroger la
+        // DB pour un serveur sur lequel le bot n'est pas présent.
+        const guild = client.guilds.cache.get(req.params.guildId);
+        if (!guild)
+          return res
+            .status(404)
+            .json({ error: t(req.lang, "dashboard.levels.guild_not_found") });
+
         const users = client.db.db
           .prepare(
             "SELECT userId, xp, level FROM users WHERE guildId = ? AND xp > 0 ORDER BY xp DESC LIMIT 100",
@@ -23,12 +31,6 @@ module.exports = function (client, middlewares, helpers) {
             "SELECT * FROM level_roles WHERE guildId = ? ORDER BY level ASC",
           )
           .all(req.params.guildId);
-
-        const guild = client.guilds.cache.get(req.params.guildId);
-        if (!guild)
-          return res
-            .status(404)
-            .json({ error: t(req.lang, "dashboard.levels.guild_not_found") });
 
         const levelsData = [];
         for (const u of users) {
@@ -70,7 +72,15 @@ module.exports = function (client, middlewares, helpers) {
     requireGlobalOwner,
     (req, res) => {
       const { id, level, roleId } = req.body;
-      if (!level || !roleId || isNaN(level))
+      // Validation stricte : level doit être un entier >= 0 (0 autorisé) et
+      // roleId une string non vide, sinon 400 plutôt qu'une erreur DB/500.
+      const parsedLevel = Number(level);
+      if (
+        !Number.isInteger(parsedLevel) ||
+        parsedLevel < 0 ||
+        typeof roleId !== "string" ||
+        roleId.trim() === ""
+      )
         return res
           .status(400)
           .json({ error: t(req.lang, "dashboard.levels.invalid_level_role") });
@@ -81,11 +91,11 @@ module.exports = function (client, middlewares, helpers) {
             .prepare(
               "SELECT id FROM level_roles WHERE guildId = ? AND level = ? AND id != ?",
             )
-            .get(req.params.guildId, level, id);
+            .get(req.params.guildId, parsedLevel, id);
           if (check)
             return res.status(400).json({
               error: t(req.lang, "dashboard.levels.level_already_rewarded", {
-                level,
+                level: parsedLevel,
               }),
             });
 
@@ -93,17 +103,17 @@ module.exports = function (client, middlewares, helpers) {
             .prepare(
               "UPDATE level_roles SET level = ?, roleId = ? WHERE id = ? AND guildId = ?",
             )
-            .run(level, roleId, id, req.params.guildId);
+            .run(parsedLevel, roleId, id, req.params.guildId);
         } else {
           const check = client.db.db
             .prepare(
               "SELECT id FROM level_roles WHERE guildId = ? AND level = ?",
             )
-            .get(req.params.guildId, level);
+            .get(req.params.guildId, parsedLevel);
           if (check)
             return res.status(400).json({
               error: t(req.lang, "dashboard.levels.level_already_rewarded", {
-                level,
+                level: parsedLevel,
               }),
             });
 
@@ -111,14 +121,14 @@ module.exports = function (client, middlewares, helpers) {
             .prepare(
               "INSERT INTO level_roles (guildId, level, roleId) VALUES (?, ?, ?)",
             )
-            .run(req.params.guildId, level, roleId);
+            .run(req.params.guildId, parsedLevel, roleId);
         }
         logDashboardAction(
           req.params.guildId,
           req.user.id,
           req.user.username,
           id ? "LEVEL_ROLE_UPDATE" : "LEVEL_ROLE_ADD",
-          { id: id || null, level, roleId },
+          { id: id || null, level: parsedLevel, roleId },
         );
         res.json({ success: true });
       } catch (error) {

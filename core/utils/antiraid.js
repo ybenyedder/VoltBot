@@ -14,6 +14,18 @@ const processSanction = async (member, moduleName, reason, client) => {
 
   const guild = member.guild;
   const lang = client.db.getGuild(guild.id, "language") || "fr";
+
+  // Gate centrale par module : si le module antiraid est désactivé pour la
+  // guilde (toggle dashboard), on ne sanctionne pas. Tous les events ne
+  // vérifient pas isModuleEnabled eux-mêmes — la décision se fait ici.
+  if (
+    client.db &&
+    typeof client.db.isModuleEnabled === "function" &&
+    !client.db.isModuleEnabled(guild.id, "antiraid")
+  ) {
+    return t(lang, "utils.antiraid.module_disabled");
+  }
+
   const config = client.db.getAntiraidConfig(guild.id);
   if (!config) return t(lang, "utils.antiraid.not_configured");
 
@@ -115,6 +127,15 @@ const processSanction = async (member, moduleName, reason, client) => {
         break;
 
       case "warn":
+        // Enregistrer le warn en DB (addWarning: userId, guildId, reason, moderatorId)
+        if (client.db && client.db.addWarning) {
+          client.db.addWarning(
+            member.id,
+            guild.id,
+            `[ANTIRAID] ${moduleName}: ${reason || "no reason"}`,
+            client.user.id,
+          );
+        }
         actionStr = t(lang, "utils.antiraid.action_warned");
         break;
 
